@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rustysynth::{SoundFont, Synthesizer, SynthesizerSettings};
-use tonnetz_core::{Mode, PitchClass, Triad};
+use tonnetz_core::{Event, Mode, PitchClass, Renderer, Triad};
 
 /// MIDI note number for a triad's root, third, and fifth in close
 /// position, given the root's own MIDI note number. Always adds upward
@@ -106,7 +106,10 @@ impl SoundBackend {
     }
 
     pub fn note_on(&self, channel: i32, key: i32, velocity: i32) {
-        self.synthesizer.lock().unwrap().note_on(channel, key, velocity);
+        self.synthesizer
+            .lock()
+            .unwrap()
+            .note_on(channel, key, velocity);
     }
 
     pub fn note_off(&self, channel: i32, key: i32) {
@@ -126,6 +129,108 @@ impl SoundBackend {
         for note in triad_midi_notes(triad, root_midi) {
             self.note_off(0, note);
         }
+    }
+}
+
+/// Configuration for `SynthRenderer`: which channel/program/register/
+/// velocity to use for the chord and for the (single-voice) melody.
+pub struct SynthRendererConfig {
+    pub chord_channel: i32,
+    pub chord_program: i32,
+    pub chord_root_midi: i32,
+    pub chord_velocity: i32,
+    pub melody_channel: i32,
+    pub melody_program: i32,
+    pub melody_start_midi: i32,
+    pub melody_velocity: i32,
+}
+
+/// A `tonnetz_core::Renderer` over `SoundBackend`: stops whatever it last
+/// played, starts the new event's chord, and tracks a single continuous
+/// melody voice via `nearest_midi_note`. Only `event.notes.first()` is
+/// rendered -- multi-note melody strategies (`TightScale`,
+/// `RollingWindowScale`) aren't fully supported by this single-voice
+/// renderer yet (see `Renderer`'s doc comment in tonnetz-core).
+pub struct SynthRenderer {
+    backend: SoundBackend,
+    config: SynthRendererConfig,
+    current_triad: Option<Triad>,
+    current_melody_midi: Option<i32>,
+}
+
+impl SynthRenderer {
+    pub fn new(backend: SoundBackend, config: SynthRendererConfig) -> Self {
+        backend.set_program(config.chord_channel, config.chord_program);
+        backend.set_program(config.melody_channel, config.melody_program);
+        SynthRenderer {
+            backend,
+            config,
+            current_triad: None,
+            current_melody_midi: None,
+        }
+    }
+
+    /// Plays a seed triad with no preceding event, anchoring the melody
+    /// voice on its root. Use this once before feeding a `Pipeline`'s
+    /// events to `render` -- a `Pipeline` yields one `Event` per *step*,
+    /// so it never produces one for its own starting triad.
+    pub fn start(&mut self, triad: Triad) {
+        self.backend.play_triad(
+            triad,
+            self.config.chord_root_midi,
+            self.config.chord_velocity,
+        );
+        self.current_triad = Some(triad);
+
+        let midi = nearest_midi_note(self.config.melody_start_midi, triad.root);
+        self.backend.note_on(
+            self.config.melody_channel,
+            midi,
+            self.config.melody_velocity,
+        );
+        self.current_melody_midi = Some(midi);
+    }
+
+    /// Stops whatever this renderer last started. Call after consuming a
+    /// pipeline, since `Renderer` has no "this is the last event" signal.
+    pub fn silence(&mut self) {
+        if let Some(prev) = self.current_triad.take() {
+            self.backend.stop_triad(prev, self.config.chord_root_midi);
+        }
+        if let Some(midi) = self.current_melody_midi.take() {
+            self.backend.note_off(self.config.melody_channel, midi);
+        }
+    }
+}
+
+impl Renderer for SynthRenderer {
+    fn render(&mut self, event: &Event) {
+        if let Some(prev) = self.current_triad {
+            self.backend.stop_triad(prev, self.config.chord_root_midi);
+        }
+        if let Some(midi) = self.current_melody_midi {
+            self.backend.note_off(self.config.melody_channel, midi);
+        }
+
+        self.backend.play_triad(
+            event.triad,
+            self.config.chord_root_midi,
+            self.config.chord_velocity,
+        );
+        self.current_triad = Some(event.triad);
+
+        let anchor = self
+            .current_melody_midi
+            .unwrap_or(self.config.melody_start_midi);
+        self.current_melody_midi = event.notes.first().map(|&pc| {
+            let midi = nearest_midi_note(anchor, pc);
+            self.backend.note_on(
+                self.config.melody_channel,
+                midi,
+                self.config.melody_velocity,
+            );
+            midi
+        });
     }
 }
 
@@ -159,7 +264,10 @@ mod tests {
         for reference in 40..90 {
             for pc in 0..12 {
                 let note = nearest_midi_note(reference, PitchClass::new(pc));
-                assert!((note - reference).abs() <= 6, "{note} too far from {reference}");
+                assert!(
+                    (note - reference).abs() <= 6,
+                    "{note} too far from {reference}"
+                );
             }
         }
     }
