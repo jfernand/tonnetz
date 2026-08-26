@@ -65,6 +65,9 @@ impl<W: WalkStrategy, M: MelodyStrategy, R: RhythmStrategy> Iterator for Pipelin
     fn next(&mut self) -> Option<Event> {
         let prev = self.triad;
         let (next, op) = self.walk.next(prev, &self.history);
+        if let Some(system) = self.walk.current_system() {
+            self.melody.set_system(system);
+        }
         let notes = self.melody.notes(prev, next, op, &self.history);
         let (onset, duration) = self.rhythm.timing(self.event_index);
 
@@ -95,7 +98,7 @@ pub trait Renderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{FreeWalk, HamiltonianCycleWalk, Mode, MovingVoice, Utt};
+    use crate::{CycleConfinedWalk, FreeWalk, HamiltonianCycleWalk, Mode, MovingVoice, System, SystemFixedScale, Utt};
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
@@ -136,6 +139,26 @@ mod tests {
             assert_eq!(event.duration, 1.0);
         }
         assert_eq!(pipeline.current(), manual_triad);
+    }
+
+    #[test]
+    fn pipeline_pushes_the_walk_s_current_system_into_system_fixed_scale() {
+        // escape_probability 0.0 stays confined to Hexatonic every step, so
+        // every event's notes should be the fixed 6-note collection derived
+        // from that step's own triad.
+        let mut pipeline = Pipeline::new(
+            CycleConfinedWalk::with_rng(System::Hexatonic, 0.0, StdRng::seed_from_u64(5)),
+            SystemFixedScale::new(),
+            ConstantRhythm,
+            Triad::new(0, Mode::Major),
+        );
+        for event in pipeline.by_ref().take(6) {
+            let mut expected: Vec<_> = System::Hexatonic.pitch_classes(event.triad);
+            expected.sort_by_key(|pc| pc.0);
+            let mut notes = event.notes.clone();
+            notes.sort_by_key(|pc| pc.0);
+            assert_eq!(notes, expected);
+        }
     }
 
     #[test]
