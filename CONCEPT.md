@@ -153,8 +153,12 @@ Strategies to implement:
 
 ```rust
 pub trait MelodyStrategy {
-    /// Called once per walk step, given the transformation just applied.
-    fn notes(&mut self, prev: Triad, next: Triad, op: Utt) -> Vec<PitchClass>;
+    /// Called once per walk step, given the transformation just applied
+    /// and every triad visited before `next` (so `prev == *history.last()
+    /// .unwrap()` after the first step). `history` was missing from the
+    /// original sketch of this trait, which left no way to implement
+    /// RollingWindowScale below; added to mirror WalkStrategy::next.
+    fn notes(&mut self, prev: Triad, next: Triad, op: Utt, history: &[Triad]) -> Vec<PitchClass>;
 }
 ```
 
@@ -171,7 +175,12 @@ pub trait MelodyStrategy {
   ranging.
 - **`SystemFixedScale`** — when a `CycleConfinedWalk` is active, the
   current hexatonic/octatonic collection (§3). Only meaningful paired
-  with that walk strategy.
+  with that walk strategy. **Not yet implemented**: `CycleConfinedWalk`
+  itself doesn't exist yet (§4), and "which system is current" is state
+  that lives in the walk strategy, not recoverable from a single
+  `(prev, next, op)` step or the triad history alone — implementing this
+  needs a real decision about how melody and walk strategies share that
+  state, not a default worth guessing at.
 
 ## 6. Rhythm strategies
 
@@ -188,8 +197,11 @@ pub trait RhythmStrategy {
 
 - **`FixedPulse { beat: f64 }`** — one event per beat. Simplest baseline.
 - **`Euclidean { pulses: usize, steps: usize }`** — standard Euclidean
-  rhythm generator (Bjorklund's algorithm), reused as a duration/onset
-  pattern.
+  rhythm generator (Bjorklund's algorithm; Toussaint, "The Euclidean
+  Algorithm Generates Traditional Musical Rhythms," 2005), reused as a
+  duration/onset pattern: each of the `pulses` onsets becomes one event,
+  onset = its absolute slot position (in units of one step), duration =
+  the gap to the next onset, cycling every `steps` units.
 - **`WindowedDurations { window: usize, palette: Vec<f64> }`** — its own
   small tabu/de-Bruijn-style process over a duration palette, independent
   of the harmonic walk's window — deliberately not reusing the harmonic
