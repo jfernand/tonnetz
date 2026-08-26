@@ -7,3 +7,4 @@ edition = "2024"
 tonnetz-core = { workspace = true }
 tonnetz-sound = { workspace = true }
 tonnetz-midi = { workspace = true }
+rand = { workspace = true }

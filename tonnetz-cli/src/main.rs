@@ -2,13 +2,17 @@ use std::error::Error;
 use std::thread::sleep;
 use std::time::Duration;
 
-use tonnetz_core::{Euclidean, Event, FreeWalk, Mode, MovingVoice, Pipeline, Renderer, Triad, Utt};
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
+use tonnetz_core::{CycleConfinedWalk, Euclidean, Event, Mode, MovingVoice, Pipeline, Renderer, System, Triad, Utt};
 use tonnetz_midi::{MidiRenderer, MidiRendererConfig};
 use tonnetz_sound::{SoundBackend, SynthRenderer, SynthRendererConfig, WavRenderer, WavRendererConfig};
 
 const UNIT_SECONDS: f64 = 0.3; // one Euclidean rhythm "step"
 const STEPS: usize = 24;
 const SOUNDFONT_PATH: &str = "assets/soundfonts/GeneralUser-GS.sf2";
+const WALK_SYSTEM: System = System::Hexatonic;
+const WALK_ESCAPE_PROBABILITY: f32 = 0.15;
 
 fn op_name(op: Utt) -> &'static str {
     match op {
@@ -40,18 +44,41 @@ impl Renderer for TextRenderer {
     }
 }
 
-fn parse_args() -> (String, Option<String>) {
+/// Builds the walk/melody/rhythm pipeline this CLI always runs, seeded so
+/// the whole thing is reproducible from a single `u64`. `MovingVoice` and
+/// `Euclidean` have no randomness of their own; `CycleConfinedWalk` is the
+/// only source of nondeterminism in this pipeline, so seeding its `StdRng`
+/// is enough to make an entire run -- same triads, same order, same
+/// timing, across every `Renderer` backend -- reproducible from that one
+/// seed.
+fn build_pipeline(seed: u64, start: Triad) -> Pipeline<CycleConfinedWalk<StdRng>, MovingVoice, Euclidean> {
+    let walk = CycleConfinedWalk::with_rng(WALK_SYSTEM, WALK_ESCAPE_PROBABILITY, StdRng::seed_from_u64(seed));
+    Pipeline::new(walk, MovingVoice, Euclidean::new(3, 8), start)
+}
+
+struct Args {
+    backend: String,
+    out: Option<String>,
+    seed: Option<u64>,
+}
+
+fn parse_args() -> Args {
     let mut backend = "sound".to_string();
     let mut out = None;
+    let mut seed = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--backend" => backend = args.next().expect("--backend requires a value"),
             "--out" => out = Some(args.next().expect("--out requires a value")),
+            "--seed" => {
+                let value = args.next().expect("--seed requires a value");
+                seed = Some(value.parse().expect("--seed must be a u64"));
+            }
             other => eprintln!("warning: ignoring unknown argument '{other}'"),
         }
     }
-    (backend, out)
+    Args { backend, out, seed }
 }
 
 fn build_renderer(backend: &str, out: Option<String>) -> Result<Box<dyn Renderer>, Box<dyn Error>> {
@@ -114,11 +141,14 @@ fn build_renderer(backend: &str, out: Option<String>) -> Result<Box<dyn Renderer
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (backend, out) = parse_args();
-    let mut renderer = build_renderer(&backend, out)?;
+    let args = parse_args();
+    let seed = args.seed.unwrap_or_else(|| rand::rng().random());
+    eprintln!("seed: {seed} (pass --seed {seed} to reproduce this run)");
+
+    let mut renderer = build_renderer(&args.backend, args.out)?;
 
     let start = Triad::new(0, Mode::Major);
-    let mut pipeline = Pipeline::new(FreeWalk::new(), MovingVoice, Euclidean::new(3, 8), start);
+    let mut pipeline = build_pipeline(seed, start);
 
     renderer.start(start);
 
@@ -137,4 +167,25 @@ fn main() -> Result<(), Box<dyn Error>> {
     renderer.finish()?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_seed_produces_the_same_progression() {
+        let start = Triad::new(0, Mode::Major);
+        let a: Vec<Event> = build_pipeline(42, start).take(STEPS).collect();
+        let b: Vec<Event> = build_pipeline(42, start).take(STEPS).collect();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn different_seeds_diverge() {
+        let start = Triad::new(0, Mode::Major);
+        let a: Vec<Event> = build_pipeline(1, start).take(STEPS).collect();
+        let b: Vec<Event> = build_pipeline(2, start).take(STEPS).collect();
+        assert_ne!(a, b);
+    }
 }

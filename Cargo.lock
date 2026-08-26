@@ -773,6 +773,7 @@ dependencies = [
 name = "tonnetz-cli"
 version = "0.1.0"
 dependencies = [
+ "rand",
  "tonnetz-core",
  "tonnetz-midi",
  "tonnetz-sound",
