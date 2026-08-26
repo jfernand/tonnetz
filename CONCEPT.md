@@ -229,11 +229,47 @@ graph TD
 `RhythmStrategy` only needs an event count. All three are swappable
 independently — a config is just "pick one of each."
 
+**Implemented as:** this diagram never specified how the three
+strategies actually get driven together or what a "Renderer" looks
+like, so `tonnetz-core::Pipeline<W, M, R>` and `tonnetz-core::Renderer`
+are new rather than a transcription of something already in this doc:
+
+```rust
+pub struct Event {
+    pub triad: Triad,
+    pub op: Utt,
+    pub notes: Vec<PitchClass>,
+    pub onset: f64,
+    pub duration: f64,
+}
+
+// Pipeline<W: WalkStrategy, M: MelodyStrategy, R: RhythmStrategy>
+// implements Iterator<Item = Event>, driving all three together.
+
+pub trait Renderer {
+    fn render(&mut self, event: &Event);
+}
+```
+
+`Pipeline` is an `Iterator`, not a `Vec<Event>` builder -- see the
+now-resolved streaming-vs-offline question below. `tonnetz_sound::
+SynthRenderer` is the first `Renderer`: it stops whatever it last
+played and starts the new event's chord and (single, continuously
+tracked) melody voice. `tonnetz-cli`'s `main.rs` builds a
+`Pipeline<FreeWalk, MovingVoice, Euclidean>` and feeds it straight to
+a `SynthRenderer` -- the first real use of every layer in this
+document at once.
+
 ## 8. Open questions for implementation
 
 - Real-time generation (stream events as they're computed) vs. offline
   (generate N events, then render) — affects whether strategies need to
   be lazy/iterator-based or can just build a `Vec<Triad>` upfront.
+  **Resolved:** `Pipeline` implements `Iterator<Item = Event>` and
+  computes one event per `.next()` call, lazily -- chosen because
+  `WalkStrategy` has no natural end (`FreeWalk` can run forever), so an
+  eager `Vec`-building API couldn't represent it. An offline consumer
+  can still get a batch via `.take(n).collect()`.
 - Whether `RhythmStrategy` should ever be allowed to read the harmonic
   walk's state (e.g. slow down at a system-modulation event) or stay
   fully decoupled as sketched above.
@@ -250,6 +286,6 @@ independently — a config is just "pick one of each."
   `tonnetz_sound::triad_midi_notes` maps a `Triad` onto real MIDI note
   numbers in close position above a caller-chosen root, always adding
   upward (root, +3 or +4, +7) so it never needs to wrap an octave.
-  `tonnetz-cli`'s `main.rs` is the first real caller: it walks
-  `FreeWalk` and plays each triad through `tonnetz-sound` directly,
-  with no melody/rhythm strategy or section 7 pipeline in between yet.
+  `tonnetz-cli`'s `main.rs` is the first real caller: it now runs a
+  full `Pipeline<FreeWalk, MovingVoice, Euclidean>` through a
+  `SynthRenderer` (section 7).
