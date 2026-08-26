@@ -11,10 +11,12 @@
 mod melody;
 mod pipeline;
 mod rhythm;
+mod voice;
 mod walk;
 pub use melody::{MelodyStrategy, MovingVoice, RollingWindowScale, SystemFixedScale, TightScale};
 pub use pipeline::{Event, Pipeline, Renderer};
 pub use rhythm::{Euclidean, FixedPulse, RhythmStrategy, WindowedDurations, bjorklund};
+pub use voice::{nearest_midi_note, triad_midi_notes, NoteChange, VoiceTracker};
 pub use walk::{CycleConfinedWalk, FreeWalk, HamiltonianCycleWalk, System, WalkStrategy, WindowedTabuWalk, PLR};
 
 /// A pitch class, 0-11, where 0 = C. Arithmetic wraps mod 12.
