@@ -175,17 +175,21 @@ pub trait MelodyStrategy {
   ranging.
 - **`SystemFixedScale`** — when a `CycleConfinedWalk` is active, the
   current hexatonic/octatonic collection (§3). Only meaningful paired
-  with that walk strategy. **Still not implemented**: `CycleConfinedWalk`
-  now exists and exposes its current `System`, but "which system is
-  current" still isn't recoverable from `MelodyStrategy::notes`'s own
-  parameters (a single `(prev, next, op)` step or the triad history alone
-  don't disambiguate it, since `op = P` alone appears in both systems).
-  Piping it through cleanly means either polluting the general
-  `MelodyStrategy` trait with a walk-specific concept that's meaningless
-  for every other walk strategy, or having the pipeline orchestrator
-  (§7) push `CycleConfinedWalk::system()` into `SystemFixedScale`
-  out of band on every step. Punting on picking between those until §7's
-  pipeline actually gets built and it's clear which shape fits.
+  with that walk strategy. **Implemented**: rather than polluting
+  `MelodyStrategy::notes`'s own parameters (a single `(prev, next, op)`
+  step or the triad history alone can't disambiguate the current system,
+  since `op = P` alone appears in both), both `WalkStrategy` and
+  `MelodyStrategy` gained a matching default no-op method --
+  `WalkStrategy::current_system() -> Option<System>` and
+  `MelodyStrategy::set_system(System)` -- so `Pipeline` (§7) can bridge
+  them generically each step without knowing either strategy's concrete
+  type: only `CycleConfinedWalk` overrides the former, only
+  `SystemFixedScale` overrides the latter, and every other strategy is
+  unaffected. The 6/8-note collection itself turned out not to need
+  tracking "which of the 4 hexatonic / 3 octatonic systems" separately:
+  `triad.root mod 4` (hexatonic) / `mod 3` (octatonic) is invariant under
+  that system's own two defining ops, so `System::pitch_classes(Triad)`
+  derives it from the current triad alone.
 
 ## 6. Rhythm strategies
 
