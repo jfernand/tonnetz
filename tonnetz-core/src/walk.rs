@@ -134,6 +134,99 @@ impl WalkStrategy for HamiltonianCycleWalk {
     }
 }
 
+/// One of the two named systems from CONCEPT.md section 3: hexatonic
+/// (alternating P, L) or octatonic (alternating P, R). P is common to
+/// both, so it's always the op used to resume alternation right after an
+/// escape.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum System {
+    Hexatonic,
+    Octatonic,
+}
+
+impl System {
+    fn pair(self) -> [Utt; 2] {
+        match self {
+            System::Hexatonic => [Utt::P, Utt::L],
+            System::Octatonic => [Utt::P, Utt::R],
+        }
+    }
+
+    /// The op that isn't one of this system's two defining ops --
+    /// applying it once is a system modulation (CONCEPT.md section 3).
+    fn third_op(self) -> Utt {
+        match self {
+            System::Hexatonic => Utt::R,
+            System::Octatonic => Utt::L,
+        }
+    }
+
+    fn toggle(self) -> System {
+        match self {
+            System::Hexatonic => System::Octatonic,
+            System::Octatonic => System::Hexatonic,
+        }
+    }
+}
+
+/// Stay on the current hexatonic or octatonic cycle (alternate its two
+/// defining ops) until a random escape fires, then take the third op once
+/// to modulate onto the other kind of system, and continue.
+///
+/// Since a system's third op is, by definition, not one of its own pair,
+/// and the continuation step always picks the pair member *other* than
+/// the last op used, this walk never repeats the same op twice in a row
+/// -- whether it just escaped or not.
+pub struct CycleConfinedWalk<R: Rng> {
+    rng: R,
+    escape_probability: f32,
+    system: System,
+    last_op: Option<Utt>,
+}
+
+impl CycleConfinedWalk<ThreadRng> {
+    pub fn new(system: System, escape_probability: f32) -> Self {
+        CycleConfinedWalk {
+            rng: rand::rng(),
+            escape_probability,
+            system,
+            last_op: None,
+        }
+    }
+}
+
+impl<R: Rng> CycleConfinedWalk<R> {
+    pub fn with_rng(system: System, escape_probability: f32, rng: R) -> Self {
+        CycleConfinedWalk {
+            rng,
+            escape_probability,
+            system,
+            last_op: None,
+        }
+    }
+
+    /// The system currently being alternated on, for callers (e.g. a
+    /// future `SystemFixedScale` melody strategy) that need to know it.
+    pub fn system(&self) -> System {
+        self.system
+    }
+}
+
+impl<R: Rng> WalkStrategy for CycleConfinedWalk<R> {
+    fn next(&mut self, current: Triad, _history: &[Triad]) -> (Triad, Utt) {
+        let op = if self.rng.random::<f32>() < self.escape_probability {
+            let op = self.system.third_op();
+            self.system = self.system.toggle();
+            op
+        } else {
+            let pair = self.system.pair();
+            if self.last_op == Some(pair[0]) { pair[1] } else { pair[0] }
+        };
+        self.last_op = Some(op);
+        (op.apply(current), op)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +291,67 @@ mod tests {
         }
         assert_eq!(t, start);
         assert_eq!(seen[..24].iter().collect::<std::collections::HashSet<_>>().len(), 24);
+    }
+
+    #[test]
+    fn cycle_confined_walk_with_zero_escape_stays_on_the_hexatonic_6_cycle() {
+        let mut walk = CycleConfinedWalk::with_rng(System::Hexatonic, 0.0, StdRng::seed_from_u64(1));
+        let start = Triad::new(0, Mode::Major);
+        let mut t = start;
+        let mut seen = vec![t];
+        for _ in 0..6 {
+            let (next, op) = walk.next(t, &seen);
+            assert!(op == Utt::P || op == Utt::L, "hexatonic confinement must not use R");
+            t = next;
+            seen.push(t);
+        }
+        assert_eq!(t, start);
+        assert_eq!(seen[..6].iter().collect::<std::collections::HashSet<_>>().len(), 6);
+    }
+
+    #[test]
+    fn cycle_confined_walk_with_zero_escape_stays_on_the_octatonic_8_cycle() {
+        let mut walk = CycleConfinedWalk::with_rng(System::Octatonic, 0.0, StdRng::seed_from_u64(1));
+        let start = Triad::new(0, Mode::Major);
+        let mut t = start;
+        let mut seen = vec![t];
+        for _ in 0..8 {
+            let (next, op) = walk.next(t, &seen);
+            assert!(op == Utt::P || op == Utt::R, "octatonic confinement must not use L");
+            t = next;
+            seen.push(t);
+        }
+        assert_eq!(t, start);
+        assert_eq!(seen[..8].iter().collect::<std::collections::HashSet<_>>().len(), 8);
+    }
+
+    #[test]
+    fn cycle_confined_walk_with_full_escape_matches_hamiltonian_cycle_walk() {
+        // Escaping every single step alternates R (hexatonic's third op)
+        // and L (octatonic's third op) while toggling system each time --
+        // exactly the R/L Hamiltonian walk, starting from Hexatonic.
+        let mut confined = CycleConfinedWalk::with_rng(System::Hexatonic, 1.0, StdRng::seed_from_u64(99));
+        let mut hamiltonian = HamiltonianCycleWalk::new();
+        let mut t = Triad::new(0, Mode::Major);
+        for _ in 0..24 {
+            let (a, op_a) = confined.next(t, &[]);
+            let (b, op_b) = hamiltonian.next(t, &[]);
+            assert_eq!(a, b);
+            assert_eq!(op_a, op_b);
+            t = a;
+        }
+    }
+
+    #[test]
+    fn cycle_confined_walk_never_repeats_the_last_op() {
+        let mut walk = CycleConfinedWalk::with_rng(System::Hexatonic, 0.3, StdRng::seed_from_u64(2024));
+        let mut t = Triad::new(0, Mode::Major);
+        let mut last_op = None;
+        for _ in 0..500 {
+            let (next, op) = walk.next(t, &[]);
+            assert_ne!(Some(op), last_op);
+            last_op = Some(op);
+            t = next;
+        }
     }
 }
