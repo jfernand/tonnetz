@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 tonnetz-core = { workspace = true }
 tonnetz-sound = { workspace = true }
+tonnetz-midi = { workspace = true }

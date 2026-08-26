@@ -160,17 +160,6 @@ impl SynthRenderer {
         }
     }
 
-    /// Deprecated inherent forwarder to `Renderer::start`, kept only until
-    /// every caller drives this through the trait generically.
-    pub fn start(&mut self, triad: Triad) {
-        <Self as Renderer>::start(self, triad);
-    }
-
-    /// Deprecated inherent forwarder to `Renderer::finish`, kept only
-    /// until every caller drives this through the trait generically.
-    pub fn silence(&mut self) {
-        let _ = <Self as Renderer>::finish(self);
-    }
 }
 
 impl Renderer for SynthRenderer {
