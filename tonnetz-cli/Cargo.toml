@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tonnetz-core = { path = "../tonnetz-core" }
-tonnetz-sound = { path = "../tonnetz-sound" }
+tonnetz-core = { workspace = true }
+tonnetz-sound = { workspace = true }
