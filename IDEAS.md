@@ -1,0 +1,2 @@
+- Make the whole thing be seeded for repro
+- Add descriptor for seed
