@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use rustysynth::{SoundFont, Synthesizer, SynthesizerSettings};
-use tonnetz_core::{Mode, Triad};
+use tonnetz_core::{Mode, PitchClass, Triad};
 
 /// MIDI note number for a triad's root, third, and fifth in close
 /// position, given the root's own MIDI note number. Always adds upward
@@ -27,6 +27,21 @@ pub fn triad_midi_notes(triad: Triad, root_midi: i32) -> [i32; 3] {
         Mode::Minor => 3,
     };
     [root_midi, root_midi + third, root_midi + 7]
+}
+
+/// The MIDI note matching `pitch_class` that's closest to `reference_midi`
+/// (ties break downward). This is what makes a `MovingVoice`-style melody
+/// actually sound like a continuous line: `PitchClass` alone has no
+/// octave, so re-deriving a MIDI note from scratch every step could leap
+/// by up to 11 semitones even though the underlying voice only ever moves
+/// by a step; anchoring each new note to the previous one keeps the
+/// motion minimal, in whichever direction is actually shorter.
+pub fn nearest_midi_note(reference_midi: i32, pitch_class: PitchClass) -> i32 {
+    let same_octave = reference_midi - reference_midi.rem_euclid(12) + pitch_class.0 as i32;
+    [same_octave - 12, same_octave, same_octave + 12]
+        .into_iter()
+        .min_by_key(|&m| (m - reference_midi).abs())
+        .expect("array is non-empty")
 }
 
 /// An open audio output stream backed by a SoundFont synthesizer. Dropping
@@ -127,5 +142,33 @@ mod tests {
                 assert_eq!(notes[2] - notes[0], 7);
             }
         }
+    }
+
+    #[test]
+    fn nearest_midi_note_matches_the_pitch_class() {
+        for reference in 40..90 {
+            for pc in 0..12 {
+                let note = nearest_midi_note(reference, PitchClass::new(pc));
+                assert_eq!(note.rem_euclid(12), pc.rem_euclid(12));
+            }
+        }
+    }
+
+    #[test]
+    fn nearest_midi_note_never_moves_more_than_a_tritone() {
+        for reference in 40..90 {
+            for pc in 0..12 {
+                let note = nearest_midi_note(reference, PitchClass::new(pc));
+                assert!((note - reference).abs() <= 6, "{note} too far from {reference}");
+            }
+        }
+    }
+
+    #[test]
+    fn nearest_midi_note_examples() {
+        // B is the nearest occurrence of pitch class 11 below middle C.
+        assert_eq!(nearest_midi_note(72, PitchClass::new(11)), 71);
+        // C# a semitone above middle C, not a semitone below.
+        assert_eq!(nearest_midi_note(60, PitchClass::new(1)), 61);
     }
 }
