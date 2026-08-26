@@ -8,6 +8,9 @@
 //! named instances. See CONCEPT.md at the repo root for the full design
 //! rationale.
 
+mod walk;
+pub use walk::{FreeWalk, HamiltonianCycleWalk, WalkStrategy, WindowedTabuWalk, PLR};
+
 /// A pitch class, 0-11, where 0 = C. Arithmetic wraps mod 12.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct PitchClass(pub u8);
