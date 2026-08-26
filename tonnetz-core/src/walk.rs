@@ -13,6 +13,15 @@ pub const PLR: [Utt; 3] = [Utt::P, Utt::L, Utt::R];
 /// strategies need to know which voice moved (CONCEPT.md section 5).
 pub trait WalkStrategy {
     fn next(&mut self, current: Triad, history: &[Triad]) -> (Triad, Utt);
+
+    /// The hexatonic/octatonic system this walk is currently confined to,
+    /// if any. Default `None`; only `CycleConfinedWalk` overrides it. This
+    /// lets `Pipeline` push the active system into `MelodyStrategy::
+    /// set_system` (for `SystemFixedScale`) without needing to know the
+    /// concrete walk type -- CONCEPT.md section 5's plumbing question.
+    fn current_system(&self) -> Option<System> {
+        None
+    }
 }
 
 /// Random choice among {P, L, R}, forbidding the op just used (since P/L/R
@@ -204,12 +213,6 @@ impl<R: Rng> CycleConfinedWalk<R> {
             last_op: None,
         }
     }
-
-    /// The system currently being alternated on, for callers (e.g. a
-    /// future `SystemFixedScale` melody strategy) that need to know it.
-    pub fn system(&self) -> System {
-        self.system
-    }
 }
 
 impl<R: Rng> WalkStrategy for CycleConfinedWalk<R> {
@@ -224,6 +227,10 @@ impl<R: Rng> WalkStrategy for CycleConfinedWalk<R> {
         };
         self.last_op = Some(op);
         (op.apply(current), op)
+    }
+
+    fn current_system(&self) -> Option<System> {
+        Some(self.system)
     }
 }
 
@@ -340,6 +347,21 @@ mod tests {
             assert_eq!(op_a, op_b);
             t = a;
         }
+    }
+
+    #[test]
+    fn free_walk_reports_no_current_system() {
+        let walk = FreeWalk::with_rng(StdRng::seed_from_u64(1));
+        assert_eq!(walk.current_system(), None);
+    }
+
+    #[test]
+    fn cycle_confined_walk_reports_its_current_system() {
+        let mut walk = CycleConfinedWalk::with_rng(System::Hexatonic, 1.0, StdRng::seed_from_u64(3));
+        assert_eq!(walk.current_system(), Some(System::Hexatonic));
+        let t = Triad::new(0, Mode::Major);
+        walk.next(t, &[]); // full escape probability guarantees a toggle
+        assert_eq!(walk.current_system(), Some(System::Octatonic));
     }
 
     #[test]
