@@ -251,18 +251,24 @@ pub struct Event {
 // implements Iterator<Item = Event>, driving all three together.
 
 pub trait Renderer {
+    fn start(&mut self, triad: Triad) {}     // default no-op
     fn render(&mut self, event: &Event);
+    fn finish(&mut self) -> Result<(), Box<dyn std::error::Error>> { Ok(()) } // default no-op
+    fn wants_realtime_pacing(&self) -> bool { true } // default: sleep between events
 }
 ```
 
 `Pipeline` is an `Iterator`, not a `Vec<Event>` builder -- see the
-now-resolved streaming-vs-offline question below. `tonnetz_sound::
-SynthRenderer` is the first `Renderer`: it stops whatever it last
-played and starts the new event's chord and (single, continuously
-tracked) melody voice. `tonnetz-cli`'s `main.rs` builds a
-`Pipeline<FreeWalk, MovingVoice, Euclidean>` and feeds it straight to
-a `SynthRenderer` -- the first real use of every layer in this
-document at once.
+now-resolved streaming-vs-offline question below. `start`/`finish`/
+`wants_realtime_pacing` were added once a second `Renderer` (file
+output, not just live sound) showed up -- see section 8's "Output
+target" bullet for why and what they enable. `tonnetz-core::
+VoiceTracker` factors the actual "which notes turn off, which turn
+on" state machine out of any one `Renderer`, shared by every backend
+below. `tonnetz-cli`'s `main.rs` builds a
+`Pipeline<FreeWalk, MovingVoice, Euclidean>` and feeds it to whichever
+`Renderer` `--backend` selects -- the first real use of every layer in
+this document at once.
 
 ## 8. Open questions for implementation
 
@@ -283,13 +289,33 @@ document at once.
 - Output target: raw event list, MIDI, or directly driving a synthesis
   backend — determines what `notes()` and `timing()` should actually
   return (pitch classes vs. absolute frequencies/octaves, for one).
-  **Partially resolved:** `tonnetz-sound` drives rustysynth (a
-  SoundFont synthesizer) directly rather than going through MIDI files
-  or a raw event list, and picks octaves itself -- `notes()`/`timing()`
-  still return pitch classes and abstract onset/duration, and
-  `tonnetz_sound::triad_midi_notes` maps a `Triad` onto real MIDI note
-  numbers in close position above a caller-chosen root, always adding
-  upward (root, +3 or +4, +7) so it never needs to wrap an octave.
-  `tonnetz-cli`'s `main.rs` is the first real caller: it now runs a
-  full `Pipeline<FreeWalk, MovingVoice, Euclidean>` through a
-  `SynthRenderer` (section 7).
+  **Resolved:** `notes()`/`timing()` stay abstract (pitch classes,
+  onset/duration in caller-chosen units) regardless of output target --
+  turning that into real MIDI note numbers, and real MIDI note numbers
+  into an actual output, is entirely a `Renderer`'s job, not the
+  strategies'. `tonnetz_core::{triad_midi_notes, nearest_midi_note,
+  VoiceTracker}` do the pitch-class-to-MIDI-note math and the
+  stop-old/start-new voice-leading state machine once, shared by every
+  backend below, so the "MIDI, or synthesis backend, or raw event list"
+  question turned out not to be an either/or: there are now four
+  interchangeable `Renderer`s, selected via `tonnetz-cli --backend`:
+    - `tonnetz_sound::SynthRenderer` -- live playback via rustysynth +
+      cpal (the original implementation).
+    - `tonnetz_sound::WavRenderer` -- drives the same rustysynth
+      `Synthesizer` offline (no cpal stream), rendering block-by-block
+      into a buffer written out as a 32-bit-float `.wav` at `finish()`.
+    - `tonnetz_midi::MidiRenderer` -- a new crate; buffers absolute-tick
+      MIDI events and writes a real `.mid` Standard MIDI File via
+      `midly` at `finish()`, with a tempo meta-event derived from the
+      same `unit_seconds` the live backend uses for pacing, so the
+      perceived tempo doesn't change across backends.
+    - `tonnetz-cli::TextRenderer` -- the plain progression trace this
+      CLI always printed, now a real `Renderer` instead of inline
+      `print!` calls in `main.rs`.
+  File-writing backends (`WavRenderer`, `MidiRenderer`) override
+  `Renderer::wants_realtime_pacing` to `false`: they encode timing into
+  the output itself via `event.onset`/`event.duration` and run as fast
+  as possible rather than sleeping in real time like the live backends
+  do. `tonnetz-cli`'s `main.rs` is the first real caller: it builds a
+  `Pipeline<FreeWalk, MovingVoice, Euclidean>` and drives whichever
+  `Renderer` `--backend` selects through one generic loop (section 7).
