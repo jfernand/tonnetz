@@ -86,7 +86,18 @@ impl RhythmStrategy for AnyRhythm {
 /// What `random_strategies` picked, in enough detail to fully reconstruct
 /// the run by eye -- printed alongside the seed so a run is documented
 /// even without re-running it.
+///
+/// `code` packs all three axes into one short, at-a-glance label -- one
+/// letter per strategy kind, immediately followed by its own numeric
+/// parameters (percent-scaled and rounded where the parameter is a
+/// fraction, e.g. an escape probability of 0.26 becomes `26`), with no
+/// separators between axes. E.g. `CO26MF75` is `C`ycleConfinedWalk on the
+/// `O`ctatonic system with a 0.`26` escape probability, `M`ovingVoice
+/// melody, `F`ixedPulse rhythm at a 0.`75` beat. It's a label for humans to
+/// eyeball and compare at a glance, not a machine format -- `--seed`
+/// remains the only thing that actually reconstructs a run.
 pub struct Choice {
+    pub code: String,
     pub walk: String,
     pub melody: String,
     pub rhythm: String,
@@ -94,9 +105,10 @@ pub struct Choice {
 
 impl std::fmt::Display for Choice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "  walk:   {}", self.walk)?;
-        writeln!(f, "  melody: {}", self.melody)?;
-        write!(f, "  rhythm: {}", self.rhythm)
+        writeln!(f, "  descriptor: {}", self.code)?;
+        writeln!(f, "  walk:       {}", self.walk)?;
+        writeln!(f, "  melody:     {}", self.melody)?;
+        write!(f, "  rhythm:     {}", self.rhythm)
     }
 }
 
@@ -120,41 +132,60 @@ fn sub_rng(rng: &mut StdRng) -> StdRng {
 pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, Choice) {
     let mut rng = StdRng::seed_from_u64(seed);
 
-    let (walk, walk_desc) = match rng.random_range(0..4) {
-        0 => (AnyWalk::Free(FreeWalk::with_rng(sub_rng(&mut rng))), "FreeWalk".to_string()),
+    let (walk, walk_desc, walk_code) = match rng.random_range(0..4) {
+        0 => (AnyWalk::Free(FreeWalk::with_rng(sub_rng(&mut rng))), "FreeWalk".to_string(), "F".to_string()),
         1 => {
             let window = rng.random_range(2..=5);
             (
                 AnyWalk::Tabu(WindowedTabuWalk::with_rng(window, sub_rng(&mut rng))),
                 format!("WindowedTabuWalk {{ window: {window} }}"),
+                format!("T{window}"),
             )
         }
-        2 => (AnyWalk::Hamiltonian(HamiltonianCycleWalk::new()), "HamiltonianCycleWalk".to_string()),
+        2 => (
+            AnyWalk::Hamiltonian(HamiltonianCycleWalk::new()),
+            "HamiltonianCycleWalk".to_string(),
+            "H".to_string(),
+        ),
         _ => {
             let system = if rng.random_bool(0.5) { System::Hexatonic } else { System::Octatonic };
             let escape_probability = rng.random_range(0.05..=0.35);
+            let system_letter = if system == System::Hexatonic { "H" } else { "O" };
             (
                 AnyWalk::Confined(CycleConfinedWalk::with_rng(system, escape_probability, sub_rng(&mut rng))),
                 format!("CycleConfinedWalk {{ system: {system:?}, escape_probability: {escape_probability:.2} }}"),
+                format!("C{system_letter}{}", (escape_probability * 100.0).round() as i32),
             )
         }
     };
 
     let melody_pool = if matches!(walk, AnyWalk::Confined(_)) { 4 } else { 3 };
-    let (melody, melody_desc) = match rng.random_range(0..melody_pool) {
-        0 => (AnyMelody::Moving(MovingVoice), "MovingVoice".to_string()),
-        1 => (AnyMelody::Tight(TightScale), "TightScale".to_string()),
+    let (melody, melody_desc, melody_code) = match rng.random_range(0..melody_pool) {
+        0 => (AnyMelody::Moving(MovingVoice), "MovingVoice".to_string(), "M".to_string()),
+        1 => (AnyMelody::Tight(TightScale), "TightScale".to_string(), "T".to_string()),
         2 => {
             let window = rng.random_range(2..=5);
-            (AnyMelody::Rolling(RollingWindowScale { window }), format!("RollingWindowScale {{ window: {window} }}"))
+            (
+                AnyMelody::Rolling(RollingWindowScale { window }),
+                format!("RollingWindowScale {{ window: {window} }}"),
+                format!("R{window}"),
+            )
         }
-        _ => (AnyMelody::SystemFixed(SystemFixedScale::new()), "SystemFixedScale".to_string()),
+        _ => (
+            AnyMelody::SystemFixed(SystemFixedScale::new()),
+            "SystemFixedScale".to_string(),
+            "S".to_string(),
+        ),
     };
 
-    let (rhythm, rhythm_desc) = match rng.random_range(0..3) {
+    let (rhythm, rhythm_desc, rhythm_code) = match rng.random_range(0..3) {
         0 => {
             let beat = rng.random_range(0.5..=1.5_f64);
-            (AnyRhythm::Fixed(FixedPulse { beat }), format!("FixedPulse {{ beat: {beat:.2} }}"))
+            (
+                AnyRhythm::Fixed(FixedPulse { beat }),
+                format!("FixedPulse {{ beat: {beat:.2} }}"),
+                format!("F{}", (beat * 100.0).round() as i32),
+            )
         }
         1 => {
             let steps = rng.random_range(5..=12);
@@ -162,18 +193,26 @@ pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, Choice) {
             (
                 AnyRhythm::Euclid(Euclidean::new(pulses, steps)),
                 format!("Euclidean {{ pulses: {pulses}, steps: {steps} }}"),
+                format!("E{pulses}{steps}"),
             )
         }
         _ => {
             let window = rng.random_range(2..=4);
             let palette = vec![1.0, 1.5, 2.0, 3.0];
             let desc = format!("WindowedDurations {{ window: {window}, palette: {palette:?} }}");
+            let code = format!("W{window}");
             let rhythm = Box::new(WindowedDurations::with_rng(window, palette, sub_rng(&mut rng)));
-            (AnyRhythm::Windowed(rhythm), desc)
+            (AnyRhythm::Windowed(rhythm), desc, code)
         }
     };
 
-    (walk, melody, rhythm, Choice { walk: walk_desc, melody: melody_desc, rhythm: rhythm_desc })
+    let code = format!("{walk_code}{melody_code}{rhythm_code}");
+    (
+        walk,
+        melody,
+        rhythm,
+        Choice { code, walk: walk_desc, melody: melody_desc, rhythm: rhythm_desc },
+    )
 }
 
 /// `random_strategies` plus the `Pipeline` built from its result.
@@ -186,6 +225,14 @@ pub fn build_pipeline(seed: u64, start: Triad) -> (Pipeline<AnyWalk, AnyMelody, 
 mod tests {
     use super::*;
     use tonnetz_core::{Event, Mode};
+
+    #[test]
+    fn seed_1_produces_the_documented_descriptor() {
+        // Locks in the exact code format: C(CycleConfinedWalk) O(ctatonic)
+        // 26(% escape) M(ovingVoice) F(ixedPulse) 75(beat*100).
+        let (_, _, _, choice) = random_strategies(1);
+        assert_eq!(choice.code, "CO26MF75");
+    }
 
     #[test]
     fn same_seed_produces_the_same_progression() {
