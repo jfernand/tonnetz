@@ -9,9 +9,11 @@
 //! rationale.
 
 mod melody;
+mod pipeline;
 mod rhythm;
 mod walk;
 pub use melody::{MelodyStrategy, MovingVoice, RollingWindowScale, TightScale};
+pub use pipeline::{Event, Pipeline, Renderer};
 pub use rhythm::{Euclidean, FixedPulse, RhythmStrategy, WindowedDurations, bjorklund};
 pub use walk::{CycleConfinedWalk, FreeWalk, HamiltonianCycleWalk, System, WalkStrategy, WindowedTabuWalk, PLR};
 
