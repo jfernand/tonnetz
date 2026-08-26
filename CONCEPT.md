@@ -175,12 +175,17 @@ pub trait MelodyStrategy {
   ranging.
 - **`SystemFixedScale`** — when a `CycleConfinedWalk` is active, the
   current hexatonic/octatonic collection (§3). Only meaningful paired
-  with that walk strategy. **Not yet implemented**: `CycleConfinedWalk`
-  itself doesn't exist yet (§4), and "which system is current" is state
-  that lives in the walk strategy, not recoverable from a single
-  `(prev, next, op)` step or the triad history alone — implementing this
-  needs a real decision about how melody and walk strategies share that
-  state, not a default worth guessing at.
+  with that walk strategy. **Still not implemented**: `CycleConfinedWalk`
+  now exists and exposes its current `System`, but "which system is
+  current" still isn't recoverable from `MelodyStrategy::notes`'s own
+  parameters (a single `(prev, next, op)` step or the triad history alone
+  don't disambiguate it, since `op = P` alone appears in both systems).
+  Piping it through cleanly means either polluting the general
+  `MelodyStrategy` trait with a walk-specific concept that's meaningless
+  for every other walk strategy, or having the pipeline orchestrator
+  (§7) push `CycleConfinedWalk::system()` into `SystemFixedScale`
+  out of band on every step. Punting on picking between those until §7's
+  pipeline actually gets built and it's clear which shape fits.
 
 ## 6. Rhythm strategies
 
