@@ -9,8 +9,10 @@
 //! rationale.
 
 mod melody;
+mod rhythm;
 mod walk;
 pub use melody::{MelodyStrategy, MovingVoice, RollingWindowScale, TightScale};
+pub use rhythm::{Euclidean, FixedPulse, RhythmStrategy, WindowedDurations, bjorklund};
 pub use walk::{FreeWalk, HamiltonianCycleWalk, WalkStrategy, WindowedTabuWalk, PLR};
 
 /// A pitch class, 0-11, where 0 = C. Arithmetic wraps mod 12.
