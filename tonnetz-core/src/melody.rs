@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use crate::{PitchClass, Triad, Utt};
+use crate::{PitchClass, System, Triad, Utt};
 
 /// Derives melody notes from a walk step. `history` holds every triad
 /// visited before `next` (i.e. `prev == *history.last().unwrap()` after
@@ -11,6 +11,14 @@ use crate::{PitchClass, Triad, Utt};
 /// CONCEPT.md's original two-triad-only signature couldn't support.
 pub trait MelodyStrategy {
     fn notes(&mut self, prev: Triad, next: Triad, op: Utt, history: &[Triad]) -> Vec<PitchClass>;
+
+    /// Called by `Pipeline` right after each walk step, whenever the
+    /// active `WalkStrategy::current_system` reports one (i.e. only when
+    /// driven by `CycleConfinedWalk`). Default no-op; only
+    /// `SystemFixedScale` needs it, and every other strategy is free to
+    /// ignore it. Kept off `notes`'s own signature so strategies that
+    /// don't care about the walk's system never see it.
+    fn set_system(&mut self, _system: System) {}
 }
 
 /// The single voice that every P/L/R step moves by step, tracked across
@@ -58,15 +66,38 @@ impl MelodyStrategy for RollingWindowScale {
     }
 }
 
-// `SystemFixedScale` (the current hexatonic/octatonic collection while a
-// `CycleConfinedWalk` holds the walk on one system) is deliberately not
-// implemented yet: CONCEPT.md itself says it's "only meaningful paired
-// with that walk strategy," and `CycleConfinedWalk` doesn't exist yet
-// (see CONCEPT.md section 4's still-open strategies). Which system is
-// "current" is state that lives in the walk strategy, not recoverable
-// from a single (prev, next, op) step or the triad history alone, so
-// this needs a real design decision about how melody and walk strategies
-// share that state -- not a default worth guessing at here.
+/// The current hexatonic/octatonic collection (CONCEPT.md section 3) while
+/// a `CycleConfinedWalk` holds the walk on one system. Only meaningful
+/// paired with that walk strategy -- `Pipeline` feeds it the active system
+/// via `set_system` each step, since a single `(prev, next, op)` step can't
+/// disambiguate it (`op == P` alone appears in both systems).
+///
+/// Before the first `set_system` call (i.e. not actually paired with
+/// `CycleConfinedWalk`), falls back to the arrived-at triad's own 3 notes,
+/// matching `TightScale` rather than panicking.
+#[derive(Default)]
+pub struct SystemFixedScale {
+    system: Option<System>,
+}
+
+impl SystemFixedScale {
+    pub fn new() -> Self {
+        SystemFixedScale { system: None }
+    }
+}
+
+impl MelodyStrategy for SystemFixedScale {
+    fn notes(&mut self, _prev: Triad, next: Triad, _op: Utt, _history: &[Triad]) -> Vec<PitchClass> {
+        match self.system {
+            Some(system) => system.pitch_classes(next),
+            None => next.pitch_classes().to_vec(),
+        }
+    }
+
+    fn set_system(&mut self, system: System) {
+        self.system = Some(system);
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -99,6 +130,26 @@ mod tests {
         let mut notes = strategy.notes(c_major, c_major, Utt::IDENTITY, &[]);
         notes.sort_by_key(|pc| pc.0);
         assert_eq!(notes, vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(7)]);
+    }
+
+    #[test]
+    fn system_fixed_scale_falls_back_to_tight_scale_before_set_system() {
+        let c_major = Triad::new(0, Mode::Major);
+        let mut strategy = SystemFixedScale::new();
+        let mut notes = strategy.notes(c_major, c_major, Utt::IDENTITY, &[]);
+        notes.sort_by_key(|pc| pc.0);
+        assert_eq!(notes, vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(7)]);
+    }
+
+    #[test]
+    fn system_fixed_scale_uses_the_pushed_system_once_set() {
+        let c_major = Triad::new(0, Mode::Major);
+        let mut strategy = SystemFixedScale::new();
+        strategy.set_system(crate::System::Hexatonic);
+        let mut notes = strategy.notes(c_major, c_major, Utt::IDENTITY, &[]);
+        notes.sort_by_key(|pc| pc.0);
+        let expected: Vec<PitchClass> = [0, 3, 4, 7, 8, 11].map(PitchClass::new).to_vec();
+        assert_eq!(notes, expected);
     }
 
     #[test]
