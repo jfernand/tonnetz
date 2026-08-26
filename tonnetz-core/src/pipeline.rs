@@ -91,8 +91,37 @@ impl<W: WalkStrategy, M: MelodyStrategy, R: RhythmStrategy> Iterator for Pipelin
 /// a full chord-scale) is left to the implementation, since strategies
 /// like `MovingVoice` (always 1 note) and `TightScale`/`RollingWindowScale`
 /// (several at once) need genuinely different rendering approaches.
+///
+/// `start`/`finish` default to no-ops and `render` stays the only required
+/// method, so every existing implementation keeps compiling unchanged; a
+/// driver that wants a uniform lifecycle across backends (live sound, a
+/// MIDI/WAV file, plain text) can still call all three generically through
+/// `dyn Renderer` without knowing the concrete backend. `finish` is
+/// fallible because file-writing backends can fail on the final flush;
+/// `start`/`render` stay infallible since they only ever buffer in memory.
 pub trait Renderer {
+    /// Called once before the first `Event`, with the pipeline's starting
+    /// triad (which `Pipeline` itself never emits as an `Event`).
+    fn start(&mut self, _triad: Triad) {}
+
     fn render(&mut self, event: &Event);
+
+    /// Called once after the last `Event` to flush/finalize -- write a
+    /// file, stop lingering notes, etc.
+    fn finish(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
+    /// Whether a driver should pace itself in real time (sleeping
+    /// `event.duration` between calls to `render`) before advancing, or
+    /// just run through every event as fast as possible. Live backends
+    /// (sound, a text trace meant to be watched) want real-time pacing;
+    /// file-writing backends (MIDI, WAV) don't -- they encode timing into
+    /// the output itself via `event.onset`/`event.duration` and should
+    /// render as fast as possible instead of sleeping in the caller.
+    fn wants_realtime_pacing(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
