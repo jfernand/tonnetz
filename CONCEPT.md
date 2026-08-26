@@ -53,6 +53,14 @@ Checked against Cohn's worked examples: `L(C minor) = Ab major`,
 `R(C minor) = Eb major`, `P(C major) = C minor`. Write a unit test per row
 before trusting this table.
 
+**Implemented as:** rather than three separate hand-written functions, the
+`tonnetz-core` crate implements P/L/R as three named instances of a single
+`Utt` type -- Hook's uniform triadic transformation, `<sign, m, n>` (Hook,
+"Uniform Triadic Transformations," Journal of Music Theory 46, 2002; see
+docs/ for papers covering it). This is a strict superset of PLR (order 288
+vs. 24), so non-Riemannian moves -- the `D` operation below, or others --
+can be added later as more `Utt` values without changing the type.
+
 There's a fourth operation, D (dominant), but it's redundant — it's a
 composition of L and R (transposition by a fifth, same mode). Don't
 implement it separately; derive it if it's ever needed, and confirm the
@@ -88,9 +96,19 @@ A walk strategy is anything implementing:
 
 ```rust
 pub trait WalkStrategy {
-    fn next(&mut self, current: Triad, history: &[Triad]) -> Triad;
+    /// Returns the next triad and the operation used to reach it --
+    /// melody strategies need the op, not just the resulting triad (see
+    /// section 5), and returning only `Triad` would leave the caller to
+    /// reconstruct the op by diffing consecutive triads.
+    fn next(&mut self, current: Triad, history: &[Triad]) -> (Triad, Utt);
 }
 ```
+
+(Resolved while implementing: earlier drafts of this sketch had `next`
+return just `Triad` and had `MelodyStrategy::notes` take an undefined
+`PlrOp` parameter that was never introduced anywhere in this document.
+`Utt`, from section 2's "Implemented as" note, supersedes the
+never-defined `PlrOp` and is used consistently in both signatures below.)
 
 Strategies to implement:
 
@@ -136,7 +154,7 @@ Strategies to implement:
 ```rust
 pub trait MelodyStrategy {
     /// Called once per walk step, given the transformation just applied.
-    fn notes(&mut self, prev: Triad, next: Triad, op: PlrOp) -> Vec<PitchClass>;
+    fn notes(&mut self, prev: Triad, next: Triad, op: Utt) -> Vec<PitchClass>;
 }
 ```
 
