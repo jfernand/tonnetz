@@ -3,7 +3,7 @@
 use rand::rngs::ThreadRng;
 use rand::{Rng, RngExt};
 
-use crate::{Triad, Utt};
+use crate::{PitchClass, Triad, Utt};
 
 /// The three neo-Riemannian moves, in a fixed order used for iteration.
 pub const PLR: [Utt; 3] = [Utt::P, Utt::L, Utt::R];
@@ -175,6 +175,24 @@ impl System {
             System::Hexatonic => System::Octatonic,
             System::Octatonic => System::Hexatonic,
         }
+    }
+
+    /// The fixed 6-note (hexatonic) or 8-note (octatonic) pitch-class
+    /// collection `triad` belongs to (CONCEPT.md section 3). `triad.root
+    /// mod 4` (hexatonic) / `mod 3` (octatonic) is invariant under that
+    /// system's own two defining ops -- P never changes root, and L/R only
+    /// move it by multiples of 4/3 respectively -- so the collection is
+    /// fully determined by `triad.root` alone; no cycle identity (which of
+    /// the 4 hexatonic / 3 octatonic systems) needs to be tracked
+    /// separately.
+    pub fn pitch_classes(self, triad: Triad) -> Vec<PitchClass> {
+        let root = triad.root.0 as i32;
+        let (modulus, offsets): (i32, &[i32]) = match self {
+            System::Hexatonic => (4, &[0, 3, 4, 7, 8, 11]),
+            System::Octatonic => (3, &[0, 1, 3, 4, 6, 7, 9, 10]),
+        };
+        let base = root.rem_euclid(modulus);
+        offsets.iter().map(|&o| PitchClass::new(base + o)).collect()
     }
 }
 
@@ -362,6 +380,42 @@ mod tests {
         let t = Triad::new(0, Mode::Major);
         walk.next(t, &[]); // full escape probability guarantees a toggle
         assert_eq!(walk.current_system(), Some(System::Octatonic));
+    }
+
+    // Hand-computed by alternating P/L from C major: C, Cm, Ab, Abm, E, Em.
+    #[test]
+    fn hexatonic_pitch_classes_match_the_c_major_augmented_collection() {
+        let mut pcs: Vec<u8> = System::Hexatonic
+            .pitch_classes(Triad::new(0, Mode::Major))
+            .into_iter()
+            .map(|pc| pc.0)
+            .collect();
+        pcs.sort();
+        assert_eq!(pcs, vec![0, 3, 4, 7, 8, 11]);
+    }
+
+    // Same collection from any triad on that cycle (root mod 4 == 0).
+    #[test]
+    fn hexatonic_pitch_classes_are_shared_across_the_whole_cycle() {
+        let from_ab_major = System::Hexatonic.pitch_classes(Triad::new(8, Mode::Major));
+        let from_c_major = System::Hexatonic.pitch_classes(Triad::new(0, Mode::Major));
+        let mut a: Vec<u8> = from_ab_major.into_iter().map(|pc| pc.0).collect();
+        let mut b: Vec<u8> = from_c_major.into_iter().map(|pc| pc.0).collect();
+        a.sort();
+        b.sort();
+        assert_eq!(a, b);
+    }
+
+    // Hand-computed by alternating P/R from C major: C, Cm, Eb, Ebm, F#, F#m, A, Am.
+    #[test]
+    fn octatonic_pitch_classes_match_the_c_major_diminished_collection() {
+        let mut pcs: Vec<u8> = System::Octatonic
+            .pitch_classes(Triad::new(0, Mode::Major))
+            .into_iter()
+            .map(|pc| pc.0)
+            .collect();
+        pcs.sort();
+        assert_eq!(pcs, vec![0, 1, 3, 4, 6, 7, 9, 10]);
     }
 
     #[test]
