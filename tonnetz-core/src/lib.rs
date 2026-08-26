@@ -8,7 +8,9 @@
 //! named instances. See CONCEPT.md at the repo root for the full design
 //! rationale.
 
+mod melody;
 mod walk;
+pub use melody::{MelodyStrategy, MovingVoice, RollingWindowScale, TightScale};
 pub use walk::{FreeWalk, HamiltonianCycleWalk, WalkStrategy, WindowedTabuWalk, PLR};
 
 /// A pitch class, 0-11, where 0 = C. Arithmetic wraps mod 12.
@@ -74,6 +76,15 @@ impl Triad {
 
     pub fn apply(self, utt: Utt) -> Triad {
         utt.apply(self)
+    }
+
+    /// The triad's three pitch classes: root, third, fifth.
+    pub fn pitch_classes(self) -> [PitchClass; 3] {
+        let third = match self.mode {
+            Mode::Major => 4,
+            Mode::Minor => 3,
+        };
+        [self.root, self.root + third, self.root + 7]
     }
 }
 
