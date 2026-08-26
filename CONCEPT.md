@@ -243,3 +243,13 @@ independently — a config is just "pick one of each."
 - Output target: raw event list, MIDI, or directly driving a synthesis
   backend — determines what `notes()` and `timing()` should actually
   return (pitch classes vs. absolute frequencies/octaves, for one).
+  **Partially resolved:** `tonnetz-sound` drives rustysynth (a
+  SoundFont synthesizer) directly rather than going through MIDI files
+  or a raw event list, and picks octaves itself -- `notes()`/`timing()`
+  still return pitch classes and abstract onset/duration, and
+  `tonnetz_sound::triad_midi_notes` maps a `Triad` onto real MIDI note
+  numbers in close position above a caller-chosen root, always adding
+  upward (root, +3 or +4, +7) so it never needs to wrap an octave.
+  `tonnetz-cli`'s `main.rs` is the first real caller: it walks
+  `FreeWalk` and plays each triad through `tonnetz-sound` directly,
+  with no melody/rhythm strategy or section 7 pipeline in between yet.
