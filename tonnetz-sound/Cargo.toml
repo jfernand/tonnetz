@@ -7,3 +7,4 @@ edition = "2024"
 tonnetz-core = { workspace = true }
 rustysynth = { workspace = true }
 cpal = { workspace = true }
+hound = { workspace = true }

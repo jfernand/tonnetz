@@ -8,6 +8,9 @@
 //! is where that question actually gets answered, by picking a MIDI note
 //! for the root and building the triad up from there in close position.
 
+mod wav;
+pub use wav::{WavRenderer, WavRendererConfig};
+
 use std::error::Error;
 use std::fs::File;
 use std::path::Path;
