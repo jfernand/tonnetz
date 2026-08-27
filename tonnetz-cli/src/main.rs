@@ -76,7 +76,8 @@ fn parse_args() -> Args {
             "--out" => out = Some(args.next().expect("--out requires a value")),
             "--seed" => {
                 let value = args.next().expect("--seed requires a value");
-                seed = Some(value.parse().expect("--seed must be a u64"));
+                let digits = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")).unwrap_or(&value);
+                seed = Some(u64::from_str_radix(digits, 16).expect("--seed must be a hexadecimal u64"));
             }
             other => eprintln!("warning: ignoring unknown argument '{other}'"),
         }
@@ -155,7 +156,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let start = Triad::new(0, Mode::Major);
     let (mut pipeline, choice) = random_pipeline::build_pipeline(seed, start);
 
-    eprintln!("seed: {seed} (pass --seed {seed} to reproduce this run)");
+    eprintln!("seed: {seed:#x} (pass --seed {seed:#x} to reproduce this run)");
     eprintln!("{choice}");
 
     renderer.start(start);
