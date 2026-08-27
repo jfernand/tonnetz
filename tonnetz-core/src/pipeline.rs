@@ -168,8 +168,8 @@ mod tests {
     use crate::{
         CycleConfinedWalk, FreeWalk, HamiltonianCycleWalk, Mode, MovingVoice, NoFill, System, SystemFixedScale, Utt,
     };
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     struct ConstantRhythm;
     impl RhythmStrategy for ConstantRhythm {

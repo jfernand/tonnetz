@@ -11,7 +11,7 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
-use crate::dual_synth::{load_synthesizer, DualSynth};
+use crate::dual_synth::{DualSynth, load_synthesizer};
 use tonnetz_core::{Event, NoteChange, Renderer, Triad, VoiceTracker};
 
 /// Configuration for `WavRenderer`: the same chord/melody channel-routing

@@ -17,8 +17,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use dual_synth::{load_synthesizer, DualSynth};
-use tonnetz_core::{triad_midi_notes, Event, Renderer, Triad, VoiceTracker};
+use dual_synth::{DualSynth, load_synthesizer};
+use tonnetz_core::{Event, Renderer, Triad, VoiceTracker, triad_midi_notes};
 
 /// An open audio output stream backed by a SoundFont synthesizer (plus,
 /// optionally, a second one overriding a single channel -- see
@@ -170,7 +170,6 @@ impl SynthRenderer {
             self.backend.note_on(self.config.melody_channel, midi, self.config.melody_velocity);
         }
     }
-
 }
 
 impl Renderer for SynthRenderer {

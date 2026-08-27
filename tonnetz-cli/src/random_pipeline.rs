@@ -14,7 +14,7 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use tonnetz_core::{
     ArpeggioFill, CycleConfinedWalk, Euclidean, FillStrategy, FixedPulse, FreeWalk, HamiltonianCycleWalk,
-    MelodyStrategy, MovingVoice, NoFill, PitchClass, Pipeline, RhythmStrategy, RollingWindowScale, System,
+    MelodyStrategy, MovingVoice, NoFill, Pipeline, PitchClass, RhythmStrategy, RollingWindowScale, System,
     SystemFixedScale, TightScale, Triad, Utt, WalkStrategy, WindowedDurations, WindowedTabuWalk,
 };
 
