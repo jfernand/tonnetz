@@ -153,7 +153,8 @@ impl Utt {
         n: 0,
     };
 
-    /// Leading-tone exchange: (root, Major) -> (root+4, Minor); fixes the minor-third edge.
+    /// Leading-tone exchange: (root, Major) -> (root+4, Minor); fixes the
+    /// minor-third edge.
     pub const L: Utt = Utt {
         sign: Sign::Minus,
         m: 4,

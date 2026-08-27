@@ -481,7 +481,8 @@ mod tests {
         assert_eq!(a, b);
     }
 
-    // Hand-computed by alternating P/R from C major: C, Cm, Eb, Ebm, F#, F#m, A, Am.
+    // Hand-computed by alternating P/R from C major: C, Cm, Eb, Ebm, F#, F#m, A,
+    // Am.
     #[test]
     fn octatonic_pitch_classes_match_the_c_major_diminished_collection() {
         let mut pcs: Vec<u8> = System::Octatonic

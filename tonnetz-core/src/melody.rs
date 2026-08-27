@@ -198,7 +198,8 @@ mod tests {
         let mut strategy = RollingWindowScale { window: 2 };
         let mut notes = strategy.notes(a_minor, f_major, Utt::L, &[c_major, a_minor]);
         notes.sort_by_key(|pc| pc.0);
-        // A minor = {A, C, E}, F major = {F, A, C}. Union = {A, C, E, F}, C major's G is excluded.
+        // A minor = {A, C, E}, F major = {F, A, C}. Union = {A, C, E, F}, C major's G
+        // is excluded.
         assert_eq!(
             notes,
             vec![
