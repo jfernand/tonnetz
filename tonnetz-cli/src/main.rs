@@ -50,7 +50,11 @@ impl Renderer for TextRenderer {
     }
 
     fn render(&mut self, event: &Event) {
-        print!(" -{}-> {}", op_name(event.op), event.triad);
+        if event.is_fill {
+            print!(" ~{}~", event.notes[0]);
+        } else {
+            print!(" -{}-> {}", op_name(event.op), event.triad);
+        }
     }
 
     fn finish(&mut self) -> Result<(), Box<dyn Error>> {
