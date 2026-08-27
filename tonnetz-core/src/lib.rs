@@ -8,11 +8,13 @@
 //! named instances. See CONCEPT.md at the repo root for the full design
 //! rationale.
 
+mod fill;
 mod melody;
 mod pipeline;
 mod rhythm;
 mod voice;
 mod walk;
+pub use fill::{ArpeggioFill, FillStrategy, NoFill};
 pub use melody::{MelodyStrategy, MovingVoice, RollingWindowScale, SystemFixedScale, TightScale};
 pub use pipeline::{Event, Pipeline, Renderer};
 pub use rhythm::{Euclidean, FixedPulse, RhythmStrategy, WindowedDurations, bjorklund};
