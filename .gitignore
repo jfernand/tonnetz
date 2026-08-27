@@ -1,2 +1,6 @@
 /target
 .idea/
+
+# ~1.2GB -- fetched locally via assets/soundfonts/fetch-salamander-piano.sh,
+# never committed. See assets/soundfonts/SalamanderGrandPiano-LICENSE.txt.
+/assets/soundfonts/salamander/

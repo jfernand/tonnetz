@@ -9,11 +9,9 @@
 //! be called as fast as possible; `wants_realtime_pacing` says so.
 
 use std::error::Error;
-use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use rustysynth::{SoundFont, Synthesizer, SynthesizerSettings};
+use crate::dual_synth::{load_synthesizer, DualSynth};
 use tonnetz_core::{Event, NoteChange, Renderer, Triad, VoiceTracker};
 
 /// Configuration for `WavRenderer`: the same chord/melody channel-routing
@@ -38,7 +36,7 @@ pub struct WavRendererConfig {
 }
 
 pub struct WavRenderer {
-    synthesizer: Synthesizer,
+    synthesizer: DualSynth,
     config: WavRendererConfig,
     voice: VoiceTracker,
     samples_per_unit: f64,
@@ -50,12 +48,34 @@ pub struct WavRenderer {
 
 impl WavRenderer {
     pub fn new(soundfont_path: impl AsRef<Path>, config: WavRendererConfig) -> Result<Self, Box<dyn Error>> {
-        let mut sf2 = File::open(soundfont_path)?;
-        let sound_font = Arc::new(SoundFont::new(&mut sf2)?);
-        let settings = SynthesizerSettings::new(config.sample_rate);
-        let mut synthesizer = Synthesizer::new(&sound_font, &settings)?;
-        synthesizer.process_midi_message(config.chord_channel, 0xC0, config.chord_program, 0);
-        synthesizer.process_midi_message(config.melody_channel, 0xC0, config.melody_program, 0);
+        Self::build(soundfont_path, None, config)
+    }
+
+    /// Like `new`, but a single `channel` is instead served by
+    /// `piano_soundfont_path` -- see `SoundBackend::with_piano_override`,
+    /// which this mirrors for offline rendering.
+    pub fn with_piano_override(
+        soundfont_path: impl AsRef<Path>,
+        piano_soundfont_path: impl AsRef<Path>,
+        channel: i32,
+        config: WavRendererConfig,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::build(soundfont_path, Some((piano_soundfont_path.as_ref(), channel)), config)
+    }
+
+    fn build(
+        soundfont_path: impl AsRef<Path>,
+        piano_override: Option<(&Path, i32)>,
+        config: WavRendererConfig,
+    ) -> Result<Self, Box<dyn Error>> {
+        let main = load_synthesizer(soundfont_path, config.sample_rate)?;
+        let over = match piano_override {
+            Some((path, channel)) => Some((channel, load_synthesizer(path, config.sample_rate)?)),
+            None => None,
+        };
+        let mut synthesizer = DualSynth::new(main, over);
+        synthesizer.program_change(config.chord_channel, config.chord_program);
+        synthesizer.program_change(config.melody_channel, config.melody_program);
 
         let voice = VoiceTracker::new(config.chord_root_midi, config.melody_start_midi);
         let samples_per_unit = config.sample_rate as f64 * config.unit_seconds;

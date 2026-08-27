@@ -8,27 +8,45 @@
 //! is where that question actually gets answered, by picking a MIDI note
 //! for the root and building the triad up from there in close position.
 
+mod dual_synth;
 mod wav;
 pub use wav::{WavRenderer, WavRendererConfig};
 
 use std::error::Error;
-use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use rustysynth::{SoundFont, Synthesizer, SynthesizerSettings};
+use dual_synth::{load_synthesizer, DualSynth};
 use tonnetz_core::{triad_midi_notes, Event, Renderer, Triad, VoiceTracker};
 
-/// An open audio output stream backed by a SoundFont synthesizer. Dropping
-/// it stops playback and releases the device.
+/// An open audio output stream backed by a SoundFont synthesizer (plus,
+/// optionally, a second one overriding a single channel -- see
+/// `with_piano_override`). Dropping it stops playback and releases the
+/// device.
 pub struct SoundBackend {
-    synthesizer: Arc<Mutex<Synthesizer>>,
+    synth: Arc<Mutex<DualSynth>>,
     _stream: cpal::Stream,
 }
 
 impl SoundBackend {
     pub fn new(soundfont_path: impl AsRef<Path>) -> Result<Self, Box<dyn Error>> {
+        Self::build(soundfont_path, None)
+    }
+
+    /// Like `new`, but a single `channel` is instead served by
+    /// `piano_soundfont_path` -- e.g. swapping in a nicer piano sample
+    /// library for the chord channel while everything else stays on the
+    /// main General MIDI bank.
+    pub fn with_piano_override(
+        soundfont_path: impl AsRef<Path>,
+        piano_soundfont_path: impl AsRef<Path>,
+        channel: i32,
+    ) -> Result<Self, Box<dyn Error>> {
+        Self::build(soundfont_path, Some((piano_soundfont_path.as_ref(), channel)))
+    }
+
+    fn build(soundfont_path: impl AsRef<Path>, piano_override: Option<(&Path, i32)>) -> Result<Self, Box<dyn Error>> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
@@ -38,12 +56,14 @@ impl SoundBackend {
         let channels = config.channels() as usize;
         let stream_config = config.config();
 
-        let mut sf2 = File::open(soundfont_path)?;
-        let sound_font = Arc::new(SoundFont::new(&mut sf2)?);
-        let settings = SynthesizerSettings::new(sample_rate);
-        let synthesizer = Arc::new(Mutex::new(Synthesizer::new(&sound_font, &settings)?));
+        let main = load_synthesizer(soundfont_path, sample_rate)?;
+        let over = match piano_override {
+            Some((path, channel)) => Some((channel, load_synthesizer(path, sample_rate)?)),
+            None => None,
+        };
+        let synth = Arc::new(Mutex::new(DualSynth::new(main, over)));
 
-        let render_synth = synthesizer.clone();
+        let render_synth = synth.clone();
         let mut left = Vec::new();
         let mut right = Vec::new();
         let stream = device.build_output_stream(
@@ -67,29 +87,20 @@ impl SoundBackend {
         )?;
         stream.play()?;
 
-        Ok(SoundBackend {
-            synthesizer,
-            _stream: stream,
-        })
+        Ok(SoundBackend { synth, _stream: stream })
     }
 
     /// Selects a General MIDI program (instrument) on the given channel.
     pub fn set_program(&self, channel: i32, program: i32) {
-        self.synthesizer
-            .lock()
-            .unwrap()
-            .process_midi_message(channel, 0xC0, program, 0);
+        self.synth.lock().unwrap().program_change(channel, program);
     }
 
     pub fn note_on(&self, channel: i32, key: i32, velocity: i32) {
-        self.synthesizer
-            .lock()
-            .unwrap()
-            .note_on(channel, key, velocity);
+        self.synth.lock().unwrap().note_on(channel, key, velocity);
     }
 
     pub fn note_off(&self, channel: i32, key: i32) {
-        self.synthesizer.lock().unwrap().note_off(channel, key);
+        self.synth.lock().unwrap().note_off(channel, key);
     }
 
     /// Starts a triad's three notes (root, third, fifth in close position

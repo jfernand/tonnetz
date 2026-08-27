@@ -12,6 +12,22 @@ use tonnetz_sound::{SoundBackend, SynthRenderer, SynthRendererConfig, WavRendere
 const UNIT_SECONDS: f64 = 0.3; // one Euclidean rhythm "step"
 const STEPS: usize = 24;
 const SOUNDFONT_PATH: &str = "assets/soundfonts/GeneralUser-GS.sf2";
+const PIANO_CHANNEL: i32 = 0; // == chord_channel below
+/// Not committed (see .gitignore) -- fetch via
+/// assets/soundfonts/fetch-salamander-piano.sh. Falls back to
+/// GeneralUser GS's piano when absent.
+const SALAMANDER_PATH: &str = "assets/soundfonts/salamander/SalamanderGrandPiano-V3+20200602.sf2";
+
+fn piano_override_path() -> Option<&'static str> {
+    if std::path::Path::new(SALAMANDER_PATH).exists() {
+        Some(SALAMANDER_PATH)
+    } else {
+        eprintln!(
+            "note: for a better piano, run assets/soundfonts/fetch-salamander-piano.sh (falling back to GeneralUser GS)"
+        );
+        None
+    }
+}
 
 fn op_name(op: Utt) -> &'static str {
     match op {
@@ -71,41 +87,44 @@ fn parse_args() -> Args {
 fn build_renderer(backend: &str, out: Option<String>) -> Result<Box<dyn Renderer>, Box<dyn Error>> {
     match backend {
         "sound" => {
-            let backend = SoundBackend::new(SOUNDFONT_PATH)?;
-            Ok(Box::new(SynthRenderer::new(
-                backend,
-                SynthRendererConfig {
-                    chord_channel: 0,
-                    chord_program: 0, // Acoustic Grand Piano
-                    chord_root_midi: 60,
-                    chord_velocity: 90,
-                    melody_channel: 1,
-                    melody_program: 73, // Flute
-                    melody_start_midi: 72,
-                    melody_velocity: 110,
-                },
-            )))
+            let config = SynthRendererConfig {
+                chord_channel: PIANO_CHANNEL,
+                chord_program: 0, // Acoustic Grand Piano
+                chord_root_midi: 60,
+                chord_velocity: 90,
+                melody_channel: 1,
+                melody_program: 73, // Flute
+                melody_start_midi: 72,
+                melody_velocity: 110,
+            };
+            let backend = match piano_override_path() {
+                Some(piano_path) => SoundBackend::with_piano_override(SOUNDFONT_PATH, piano_path, PIANO_CHANNEL)?,
+                None => SoundBackend::new(SOUNDFONT_PATH)?,
+            };
+            Ok(Box::new(SynthRenderer::new(backend, config)))
         }
         "text" => Ok(Box::new(TextRenderer)),
         "wav" => {
             let out_path = out.unwrap_or_else(|| "output.wav".to_string()).into();
-            Ok(Box::new(WavRenderer::new(
-                SOUNDFONT_PATH,
-                WavRendererConfig {
-                    chord_channel: 0,
-                    chord_program: 0,
-                    chord_root_midi: 60,
-                    chord_velocity: 90,
-                    melody_channel: 1,
-                    melody_program: 73,
-                    melody_start_midi: 72,
-                    melody_velocity: 110,
-                    sample_rate: 44100,
-                    unit_seconds: UNIT_SECONDS,
-                    release_seconds: 1.0,
-                    out_path,
-                },
-            )?))
+            let config = WavRendererConfig {
+                chord_channel: PIANO_CHANNEL,
+                chord_program: 0,
+                chord_root_midi: 60,
+                chord_velocity: 90,
+                melody_channel: 1,
+                melody_program: 73,
+                melody_start_midi: 72,
+                melody_velocity: 110,
+                sample_rate: 44100,
+                unit_seconds: UNIT_SECONDS,
+                release_seconds: 1.0,
+                out_path,
+            };
+            let renderer = match piano_override_path() {
+                Some(piano_path) => WavRenderer::with_piano_override(SOUNDFONT_PATH, piano_path, PIANO_CHANNEL, config)?,
+                None => WavRenderer::new(SOUNDFONT_PATH, config)?,
+            };
+            Ok(Box::new(renderer))
         }
         "midi" => {
             let out_path = out.unwrap_or_else(|| "output.mid".to_string()).into();

@@ -1,0 +1,23 @@
+*** Salamander Grand Piano SF2 (V3+20200602) ***
+*** License: Creative Commons Attribution 3.0 (CC-BY 3.0) ***
+*** http://creativecommons.org/licenses/by/3.0/ ***
+
+Original sample library ("Salamander Grand Piano", a Yamaha C5 sampled at
+48kHz/24bit, 16 velocity layers) created and published by Alexander Holm
+under CC-BY 3.0. Source: https://archive.org/details/SalamanderGrandPianoV3
+
+This SF2 conversion ("SalamanderGrandPiano-SF2-V3+20200602") was assembled
+by roberto@zenvoid.org for the FreePats project. Some features of the
+original .sfz are not included in this SF2 version (amplifier velocity
+tracking, pedal/hammer/string-resonance noises). Source:
+https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html
+
+Not committed to this repository -- see fetch-salamander-piano.sh in this
+directory to download it (verified against a known checksum). Used by
+tonnetz-cli as an optional, better-sounding replacement for the chord
+channel's default GeneralUser GS piano; everything else still uses
+GeneralUser-GS.sf2 (see GeneralUser-GS-LICENSE.txt).
+
+CC-BY 3.0 requires attribution -- this file is that attribution. Redistribute
+the SF2 itself only under the same terms, crediting Alexander Holm as the
+original author.
