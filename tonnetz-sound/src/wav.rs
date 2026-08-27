@@ -141,7 +141,11 @@ impl Renderer for WavRenderer {
 
     fn render(&mut self, event: &Event) {
         self.advance_to(self.units_to_samples(event.onset));
-        let change = self.voice.advance(event);
+        let change = if event.is_fill {
+            self.voice.advance_fill(event.notes[0])
+        } else {
+            self.voice.advance(event)
+        };
         self.apply(change);
         self.last_event_end_units = event.onset + event.duration;
     }
@@ -177,7 +181,7 @@ impl Renderer for WavRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tonnetz_core::{Euclidean, FreeWalk, Mode, MovingVoice, Pipeline};
+    use tonnetz_core::{Euclidean, FreeWalk, Mode, MovingVoice, NoFill, Pipeline};
 
     fn soundfont_path() -> String {
         concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/soundfonts/GeneralUser-GS.sf2").to_string()
@@ -209,7 +213,7 @@ mod tests {
         let mut renderer = WavRenderer::new(soundfont_path(), config).expect("renderer should construct");
 
         let start = Triad::new(0, Mode::Major);
-        let mut pipeline = Pipeline::new(FreeWalk::new(), MovingVoice, Euclidean::new(3, 8), start);
+        let mut pipeline = Pipeline::new(FreeWalk::new(), MovingVoice, Euclidean::new(3, 8), NoFill, start);
         renderer.start(start);
         let mut last_end = 0.0;
         for event in pipeline.by_ref().take(8) {

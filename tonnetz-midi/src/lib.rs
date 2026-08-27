@@ -133,7 +133,11 @@ impl Renderer for MidiRenderer {
 
     fn render(&mut self, event: &Event) {
         let tick = self.units_to_ticks(event.onset);
-        let change = self.voice.advance(event);
+        let change = if event.is_fill {
+            self.voice.advance_fill(event.notes[0])
+        } else {
+            self.voice.advance(event)
+        };
         self.push_change(tick, change);
         self.last_event_end_units = event.onset + event.duration;
     }
@@ -185,7 +189,7 @@ impl Renderer for MidiRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tonnetz_core::{Euclidean, FreeWalk, Mode, MovingVoice, Pipeline};
+    use tonnetz_core::{Euclidean, FreeWalk, Mode, MovingVoice, NoFill, Pipeline};
 
     fn test_config(out_path: PathBuf) -> MidiRendererConfig {
         MidiRendererConfig {
@@ -209,7 +213,7 @@ mod tests {
         let mut renderer = MidiRenderer::new(test_config(out_path.clone()));
 
         let start = Triad::new(0, Mode::Major);
-        let mut pipeline = Pipeline::new(FreeWalk::new(), MovingVoice, Euclidean::new(3, 8), start);
+        let mut pipeline = Pipeline::new(FreeWalk::new(), MovingVoice, Euclidean::new(3, 8), NoFill, start);
         renderer.start(start);
         for event in pipeline.by_ref().take(8) {
             renderer.render(&event);

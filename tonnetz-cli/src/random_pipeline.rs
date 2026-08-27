@@ -216,9 +216,9 @@ pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, Choice) {
 }
 
 /// `random_strategies` plus the `Pipeline` built from its result.
-pub fn build_pipeline(seed: u64, start: Triad) -> (Pipeline<AnyWalk, AnyMelody, AnyRhythm>, Choice) {
+pub fn build_pipeline(seed: u64, start: Triad) -> (Pipeline<AnyWalk, AnyMelody, AnyRhythm, tonnetz_core::NoFill>, Choice) {
     let (walk, melody, rhythm, choice) = random_strategies(seed);
-    (Pipeline::new(walk, melody, rhythm, start), choice)
+    (Pipeline::new(walk, melody, rhythm, tonnetz_core::NoFill, start), choice)
 }
 
 #[cfg(test)]

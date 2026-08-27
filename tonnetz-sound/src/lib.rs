@@ -180,7 +180,11 @@ impl Renderer for SynthRenderer {
     }
 
     fn render(&mut self, event: &Event) {
-        let change = self.voice.advance(event);
+        let change = if event.is_fill {
+            self.voice.advance_fill(event.notes[0])
+        } else {
+            self.voice.advance(event)
+        };
         self.apply(change);
     }
 

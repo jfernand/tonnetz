@@ -116,6 +116,25 @@ impl VoiceTracker {
         }
     }
 
+    /// Like `advance`, but for a `FillStrategy`-produced event: only the
+    /// melody voice moves (anchored on the previous melody note, same as
+    /// `advance`); the chord is left exactly as it is, since a fill
+    /// doesn't move the harmonic walk.
+    pub fn advance_fill(&mut self, pitch: PitchClass) -> NoteChange {
+        let melody_off = self.current_melody;
+
+        let anchor = self.current_melody.unwrap_or(self.melody_start_midi);
+        let midi = nearest_midi_note(anchor, pitch);
+        self.current_melody = Some(midi);
+
+        NoteChange {
+            chord_off: None,
+            chord_on: None,
+            melody_off,
+            melody_on: Some(midi),
+        }
+    }
+
     /// Stops whatever was last sounding, with nothing new to start. Call
     /// after consuming a pipeline, since neither `Renderer::render` nor
     /// `advance` has a "this is the last event" signal of their own.
@@ -199,6 +218,7 @@ mod tests {
             notes: vec![PitchClass::new(9)], // the new A that MovingVoice would report
             onset: 0.0,
             duration: 1.0,
+            is_fill: false,
         };
         let change = tracker.advance(&event);
 
@@ -222,6 +242,7 @@ mod tests {
             notes: vec![],
             onset: 0.0,
             duration: 1.0,
+            is_fill: false,
         };
         let change = tracker.advance(&event);
         assert!(change.melody_off.is_some());
@@ -242,5 +263,31 @@ mod tests {
         let again = tracker.finish();
         assert_eq!(again.chord_off, None);
         assert_eq!(again.melody_off, None);
+    }
+
+    #[test]
+    fn advance_fill_leaves_the_chord_untouched() {
+        let mut tracker = VoiceTracker::new(60, 72);
+        let start = tracker.start(Triad::new(0, Mode::Major));
+
+        let change = tracker.advance_fill(PitchClass::new(7));
+        assert_eq!(change.chord_off, None);
+        assert_eq!(change.chord_on, None);
+        assert_eq!(change.melody_off, start.melody_on);
+        // Anchored on the previous melody note, same as `advance`.
+        let anchor = start.melody_on.unwrap();
+        assert_eq!(change.melody_on, Some(nearest_midi_note(anchor, PitchClass::new(7))));
+    }
+
+    #[test]
+    fn advance_fill_chains_off_the_previous_fill() {
+        let mut tracker = VoiceTracker::new(60, 72);
+        tracker.start(Triad::new(0, Mode::Major));
+
+        let first = tracker.advance_fill(PitchClass::new(7));
+        let second = tracker.advance_fill(PitchClass::new(4));
+        assert_eq!(second.melody_off, first.melody_on);
+        assert_eq!(second.chord_off, None);
+        assert_eq!(second.chord_on, None);
     }
 }
