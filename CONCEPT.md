@@ -217,6 +217,53 @@ pub trait RhythmStrategy {
   `window` parameter here, since rhythmic and harmonic pacing are
   probably not the same thing (open question — see §8).
 
+## 6a. Fill strategies (melodic subdivision)
+
+Not in the original sketch — added once the chord and melody voices always
+retriggering in lockstep at each `RhythmStrategy`-timed beat started
+feeling too rigid: the melody wanted a faster, independent pattern of its
+own in the gaps between main beats (e.g. chord on beats 1 and 3, melody
+matching that *and* adding two extra arpeggiated notes on beats 2 and 4) —
+a counter-rhythm/subdivision layered on top, not a new main pulse.
+
+```rust
+pub trait FillStrategy {
+    /// Given the triad the main event just arrived at, and that event's
+    /// own onset-to-onset duration, return 0+ extra notes to interleave
+    /// before the next main event -- each paired with its onset as a
+    /// fraction of `duration`, strictly in (0.0, 1.0), ascending.
+    fn fills(&mut self, triad: Triad, duration: f64) -> Vec<(f64, PitchClass)>;
+}
+```
+
+Kept as a *separate* axis from `RhythmStrategy` rather than folded into
+it, because the chord and melody need independently shrinkable durations
+within one main step — a single shared `(onset, duration)` per step (all
+`RhythmStrategy` produces) can't express "the chord keeps ringing for the
+full beat, but the melody's own note stops early so a fill can take over
+before the next chord change."
+
+- **`NoFill`** — no subdivision; today's original lockstep behavior. The
+  default/off option.
+- **`ArpeggioFill { count: usize }`** — arpeggiates the current triad's
+  other tones (cycling third, fifth, root, ...) at `count` evenly-spaced
+  points in the gap.
+
+**Implemented as:** `Pipeline` gained a 4th type parameter, `F: FillStrategy`
+(`Pipeline<W, M, R, F>`), and an internal pending-fills queue. Each main
+event is still emitted as before, except its own `duration` is *shrunk* to
+reach only the first fill (or left untouched if there are none), and the
+fill notes are queued as ordinary-looking extra `Event`s (a new
+`Event::is_fill: bool` marks them, `op: Utt::IDENTITY` since the walk
+didn't move) with durations chained legato through to the next main
+event. This is why no changes were needed to `tonnetz-cli`'s driving
+loop or to any `Renderer`'s timing math: fills are just more events in the
+same flat stream, and the loop already paces strictly off each event's own
+`duration`. Only `VoiceTracker` needed a new method,
+`advance_fill(pitch) -> NoteChange`, which moves the melody voice the same
+way `advance` does but leaves the chord's `NoteChange` fields `None` since
+a fill never touches the chord.
+
 ## 7. Pipeline
 
 ```mermaid
@@ -235,7 +282,7 @@ independently — a config is just "pick one of each."
 
 **Implemented as:** this diagram never specified how the three
 strategies actually get driven together or what a "Renderer" looks
-like, so `tonnetz-core::Pipeline<W, M, R>` and `tonnetz-core::Renderer`
+like, so `tonnetz-core::Pipeline<W, M, R, F>` and `tonnetz-core::Renderer`
 are new rather than a transcription of something already in this doc:
 
 ```rust
@@ -245,10 +292,11 @@ pub struct Event {
     pub notes: Vec<PitchClass>,
     pub onset: f64,
     pub duration: f64,
+    pub is_fill: bool, // set by FillStrategy-produced events (section 6a)
 }
 
-// Pipeline<W: WalkStrategy, M: MelodyStrategy, R: RhythmStrategy>
-// implements Iterator<Item = Event>, driving all three together.
+// Pipeline<W: WalkStrategy, M: MelodyStrategy, R: RhythmStrategy, F: FillStrategy>
+// implements Iterator<Item = Event>, driving all four together.
 
 pub trait Renderer {
     fn start(&mut self, triad: Triad) {}     // default no-op
@@ -266,9 +314,10 @@ target" bullet for why and what they enable. `tonnetz-core::
 VoiceTracker` factors the actual "which notes turn off, which turn
 on" state machine out of any one `Renderer`, shared by every backend
 below. `tonnetz-cli`'s `main.rs` builds a
-`Pipeline<FreeWalk, MovingVoice, Euclidean>` and feeds it to whichever
-`Renderer` `--backend` selects -- the first real use of every layer in
-this document at once.
+`Pipeline<AnyWalk, AnyMelody, AnyRhythm, AnyFill>` (each axis randomly
+picked from the seed, per `tonnetz-cli::random_pipeline`) and feeds it
+to whichever `Renderer` `--backend` selects -- the first real use of
+every layer in this document at once.
 
 ## 8. Open questions for implementation
 
