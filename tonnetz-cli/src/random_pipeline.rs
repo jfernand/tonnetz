@@ -13,9 +13,9 @@
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use tonnetz_core::{
-    CycleConfinedWalk, Euclidean, FixedPulse, FreeWalk, HamiltonianCycleWalk, MelodyStrategy, MovingVoice,
-    PitchClass, Pipeline, RhythmStrategy, RollingWindowScale, System, SystemFixedScale, TightScale, Triad, Utt,
-    WalkStrategy, WindowedDurations, WindowedTabuWalk,
+    ArpeggioFill, CycleConfinedWalk, Euclidean, FillStrategy, FixedPulse, FreeWalk, HamiltonianCycleWalk,
+    MelodyStrategy, MovingVoice, NoFill, PitchClass, Pipeline, RhythmStrategy, RollingWindowScale, System,
+    SystemFixedScale, TightScale, Triad, Utt, WalkStrategy, WindowedDurations, WindowedTabuWalk,
 };
 
 pub enum AnyWalk {
@@ -83,24 +83,39 @@ impl RhythmStrategy for AnyRhythm {
     }
 }
 
+pub enum AnyFill {
+    None(NoFill),
+    Arpeggio(ArpeggioFill),
+}
+
+impl FillStrategy for AnyFill {
+    fn fills(&mut self, triad: Triad, duration: f64) -> Vec<(f64, PitchClass)> {
+        match self {
+            AnyFill::None(f) => f.fills(triad, duration),
+            AnyFill::Arpeggio(f) => f.fills(triad, duration),
+        }
+    }
+}
+
 /// What `random_strategies` picked, in enough detail to fully reconstruct
 /// the run by eye -- printed alongside the seed so a run is documented
 /// even without re-running it.
 ///
-/// `code` packs all three axes into one short, at-a-glance label -- one
+/// `code` packs all four axes into one short, at-a-glance label -- one
 /// letter per strategy kind, immediately followed by its own numeric
 /// parameters (percent-scaled and rounded where the parameter is a
 /// fraction, e.g. an escape probability of 0.26 becomes `26`), with no
-/// separators between axes. E.g. `CO26MF75` is `C`ycleConfinedWalk on the
+/// separators between axes. E.g. `CO26MF75N` is `C`ycleConfinedWalk on the
 /// `O`ctatonic system with a 0.`26` escape probability, `M`ovingVoice
-/// melody, `F`ixedPulse rhythm at a 0.`75` beat. It's a label for humans to
-/// eyeball and compare at a glance, not a machine format -- `--seed`
-/// remains the only thing that actually reconstructs a run.
+/// melody, `F`ixedPulse rhythm at a 0.`75` beat, `N`oFill. It's a label for
+/// humans to eyeball and compare at a glance, not a machine format --
+/// `--seed` remains the only thing that actually reconstructs a run.
 pub struct Choice {
     pub code: String,
     pub walk: String,
     pub melody: String,
     pub rhythm: String,
+    pub fill: String,
 }
 
 impl std::fmt::Display for Choice {
@@ -108,7 +123,8 @@ impl std::fmt::Display for Choice {
         writeln!(f, "  descriptor: {}", self.code)?;
         writeln!(f, "  walk:       {}", self.walk)?;
         writeln!(f, "  melody:     {}", self.melody)?;
-        write!(f, "  rhythm:     {}", self.rhythm)
+        writeln!(f, "  rhythm:     {}", self.rhythm)?;
+        write!(f, "  fill:       {}", self.fill)
     }
 }
 
@@ -120,16 +136,19 @@ fn sub_rng(rng: &mut StdRng) -> StdRng {
     StdRng::seed_from_u64(rng.random())
 }
 
-/// Builds a fully random -- but fully reproducible -- walk/melody/rhythm
-/// trio from a single seed.
+/// Builds a fully random -- but fully reproducible -- walk/melody/rhythm/
+/// fill quartet from a single seed.
 ///
 /// Draw order from the seed (fixed; changing it changes what a
 /// previously-recorded seed reproduces): walk kind, then walk params, then
 /// melody kind (from a pool that includes `SystemFixedScale` only when the
 /// walk just picked is `CycleConfinedWalk` -- it's only meaningful paired
 /// with that walk, see `tonnetz_core::melody`'s doc comment), then melody
-/// params, then rhythm kind, then rhythm params.
-pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, Choice) {
+/// params, then rhythm kind, then rhythm params, then fill kind, then fill
+/// params. Fill was added last in this order specifically so it didn't
+/// change what any existing seed's walk/melody/rhythm draws produce --
+/// only whether/how it also gets a fill on top.
+pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, AnyFill, Choice) {
     let mut rng = StdRng::seed_from_u64(seed);
 
     let (walk, walk_desc, walk_code) = match rng.random_range(0..4) {
@@ -206,19 +225,34 @@ pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, Choice) {
         }
     };
 
-    let code = format!("{walk_code}{melody_code}{rhythm_code}");
+    // Roughly 50/50 no-fill vs. an arpeggiated subdivision, so most of the
+    // existing randomized combinations still sound as they did before this
+    // axis existed.
+    let (fill, fill_desc, fill_code) = if rng.random_bool(0.5) {
+        (AnyFill::None(NoFill), "NoFill".to_string(), "N".to_string())
+    } else {
+        let count = rng.random_range(1..=3);
+        (
+            AnyFill::Arpeggio(ArpeggioFill { count }),
+            format!("ArpeggioFill {{ count: {count} }}"),
+            format!("A{count}"),
+        )
+    };
+
+    let code = format!("{walk_code}{melody_code}{rhythm_code}{fill_code}");
     (
         walk,
         melody,
         rhythm,
-        Choice { code, walk: walk_desc, melody: melody_desc, rhythm: rhythm_desc },
+        fill,
+        Choice { code, walk: walk_desc, melody: melody_desc, rhythm: rhythm_desc, fill: fill_desc },
     )
 }
 
 /// `random_strategies` plus the `Pipeline` built from its result.
-pub fn build_pipeline(seed: u64, start: Triad) -> (Pipeline<AnyWalk, AnyMelody, AnyRhythm, tonnetz_core::NoFill>, Choice) {
-    let (walk, melody, rhythm, choice) = random_strategies(seed);
-    (Pipeline::new(walk, melody, rhythm, tonnetz_core::NoFill, start), choice)
+pub fn build_pipeline(seed: u64, start: Triad) -> (Pipeline<AnyWalk, AnyMelody, AnyRhythm, AnyFill>, Choice) {
+    let (walk, melody, rhythm, fill, choice) = random_strategies(seed);
+    (Pipeline::new(walk, melody, rhythm, fill, start), choice)
 }
 
 #[cfg(test)]
@@ -229,9 +263,12 @@ mod tests {
     #[test]
     fn seed_1_produces_the_documented_descriptor() {
         // Locks in the exact code format: C(CycleConfinedWalk) O(ctatonic)
-        // 26(% escape) M(ovingVoice) F(ixedPulse) 75(beat*100).
-        let (_, _, _, choice) = random_strategies(1);
-        assert_eq!(choice.code, "CO26MF75");
+        // 26(% escape) M(ovingVoice) F(ixedPulse) 75(beat*100) A(rpeggioFill) 3(count).
+        // The walk/melody/rhythm portion (CO26MF75) is unchanged from before
+        // the fill axis was added, confirming it was appended without
+        // disturbing the earlier draws.
+        let (_, _, _, _, choice) = random_strategies(1);
+        assert_eq!(choice.code, "CO26MF75A3");
     }
 
     #[test]
@@ -258,7 +295,7 @@ mod tests {
     #[test]
     fn system_fixed_scale_is_only_ever_paired_with_cycle_confined_walk() {
         for seed in 0..500 {
-            let (walk, melody, _, _) = random_strategies(seed);
+            let (walk, melody, _, _, _) = random_strategies(seed);
             if matches!(melody, AnyMelody::SystemFixed(_)) {
                 assert!(matches!(walk, AnyWalk::Confined(_)), "seed {seed} paired SystemFixedScale with a non-confined walk");
             }
