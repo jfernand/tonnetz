@@ -40,29 +40,49 @@ fn op_name(op: Utt) -> &'static str {
     }
 }
 
-/// Formalizes the plain trace this CLI always used to print alongside live
-/// sound into a real `Renderer` -- proving the abstraction covers existing
-/// behavior, not just the new file-writing backends. Choosing `--backend
-/// sound` now means the trace no longer prints; only `--backend text` does.
+/// Prints the seed triad's own notes -- called once before the loop,
+/// independent of which `Renderer` is actually producing sound/a file, so
+/// the notes being played are always visible regardless of `--backend`.
+fn print_start(triad: Triad) {
+    print!("[");
+    for (i, pc) in triad.pitch_classes().iter().enumerate() {
+        if i > 0 {
+            print!(" ");
+        }
+        print!("{pc}");
+    }
+    print!("]");
+}
+
+/// Prints one event's notes as they're triggered -- a fill shows just its
+/// own pitch; a main event shows the new chord's notes plus the melody
+/// note(s) for this step (never shown by the old triad-symbol-only trace).
+fn print_event(event: &Event) {
+    if event.is_fill {
+        print!(" ~{}~", event.notes[0]);
+        return;
+    }
+    print!(" -{}-> [", op_name(event.op));
+    for (i, pc) in event.triad.pitch_classes().iter().enumerate() {
+        if i > 0 {
+            print!(" ");
+        }
+        print!("{pc}");
+    }
+    print!("]");
+    for pc in &event.notes {
+        print!("+{pc}");
+    }
+}
+
+/// A `Renderer` that produces no audio or file -- pairs with the universal
+/// `print_start`/`print_event` trace above (which runs for every backend)
+/// to give a "just show me the notes, don't open a device or write a file"
+/// option.
 struct TextRenderer;
 
 impl Renderer for TextRenderer {
-    fn start(&mut self, triad: Triad) {
-        print!("{triad}");
-    }
-
-    fn render(&mut self, event: &Event) {
-        if event.is_fill {
-            print!(" ~{}~", event.notes[0]);
-        } else {
-            print!(" -{}-> {}", op_name(event.op), event.triad);
-        }
-    }
-
-    fn finish(&mut self) -> Result<(), Box<dyn Error>> {
-        println!();
-        Ok(())
-    }
+    fn render(&mut self, _event: &Event) {}
 }
 
 struct Args {
@@ -194,6 +214,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("seed: {seed:#x} (pass --seed {seed:#x} to reproduce this run)");
     eprintln!("{choice}");
 
+    print_start(start);
     renderer.start(start);
 
     let mut last_duration = 0.0;
@@ -204,6 +225,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if renderer.wants_realtime_pacing() {
             sleep(Duration::from_secs_f64(event.duration * UNIT_SECONDS));
         }
+        print_event(&event);
         renderer.render(&event);
         last_duration = event.duration;
     }
@@ -211,6 +233,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if renderer.wants_realtime_pacing() {
         sleep(Duration::from_secs_f64(last_duration * UNIT_SECONDS));
     }
+    println!();
     renderer.finish()?;
 
     Ok(())
