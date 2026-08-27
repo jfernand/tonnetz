@@ -1,6 +1,7 @@
 mod random_pipeline;
 
 use std::error::Error;
+use std::io::{self, Write};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -43,6 +44,12 @@ fn op_name(op: Utt) -> &'static str {
 /// Prints the seed triad's own notes -- called once before the loop,
 /// independent of which `Renderer` is actually producing sound/a file, so
 /// the notes being played are always visible regardless of `--backend`.
+///
+/// `print!` alone doesn't make text show up as it's written: stdout is
+/// only line-buffered (flushing on `\n`) when connected to a terminal, and
+/// fully block-buffered otherwise (e.g. piped to `tee`) -- either way, an
+/// explicit `flush()` is the only thing that's guaranteed to make each
+/// note appear immediately rather than all at once at exit.
 fn print_start(triad: Triad) {
     print!("[");
     for (i, pc) in triad.pitch_classes().iter().enumerate() {
@@ -52,6 +59,7 @@ fn print_start(triad: Triad) {
         print!("{pc}");
     }
     print!("]");
+    let _ = io::stdout().flush();
 }
 
 /// Prints one event's notes as they're triggered -- a fill shows just its
@@ -60,6 +68,7 @@ fn print_start(triad: Triad) {
 fn print_event(event: &Event) {
     if event.is_fill {
         print!(" ~{}~", event.notes[0]);
+        let _ = io::stdout().flush();
         return;
     }
     print!(" -{}-> [", op_name(event.op));
@@ -73,6 +82,7 @@ fn print_event(event: &Event) {
     for pc in &event.notes {
         print!("+{pc}");
     }
+    let _ = io::stdout().flush();
 }
 
 /// A `Renderer` that produces no audio or file -- pairs with the universal
