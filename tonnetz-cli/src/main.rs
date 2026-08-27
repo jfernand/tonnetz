@@ -41,46 +41,50 @@ fn op_name(op: Utt) -> &'static str {
     }
 }
 
-/// Prints the seed triad's own notes -- called once before the loop,
-/// independent of which `Renderer` is actually producing sound/a file, so
-/// the notes being played are always visible regardless of `--backend`.
+/// Widest a `PitchClass`'s `Display` ever gets, e.g. "A#" -- used to pad
+/// note columns so consecutive lines line up regardless of which notes
+/// appear.
+const PITCH_WIDTH: usize = 2;
+
+/// A triad as its three notes, root first (`Triad::pitch_classes()`'s own
+/// order) -- unlike `Triad`'s bare `Display` (e.g. "C" for C major, with no
+/// suffix), this can never be mistaken for a single melody note. Always
+/// exactly 10 characters, so triad columns line up across lines without
+/// needing their own padding.
+fn triad_notes(triad: Triad) -> String {
+    let pcs = triad.pitch_classes();
+    format!("[{:<PITCH_WIDTH$} {:<PITCH_WIDTH$} {:<PITCH_WIDTH$}]", pcs[0], pcs[1], pcs[2])
+}
+
+/// Prints the seed triad alone -- called once before the loop, independent
+/// of which `Renderer` is actually producing sound/a file, so the notes
+/// being played are always visible regardless of `--backend`.
 ///
-/// `print!` alone doesn't make text show up as it's written: stdout is
-/// only line-buffered (flushing on `\n`) when connected to a terminal, and
-/// fully block-buffered otherwise (e.g. piped to `tee`) -- either way, an
-/// explicit `flush()` is the only thing that's guaranteed to make each
-/// note appear immediately rather than all at once at exit.
+/// `print!`/`println!` alone don't make text show up as it's written:
+/// stdout is only line-buffered (flushing on `\n`) when connected to a
+/// terminal, and fully block-buffered otherwise (e.g. piped to `tee`) --
+/// either way, an explicit `flush()` is the only thing that's guaranteed
+/// to make each line appear immediately rather than all at once at exit.
 fn print_start(triad: Triad) {
-    print!("[");
-    for (i, pc) in triad.pitch_classes().iter().enumerate() {
-        if i > 0 {
-            print!(" ");
-        }
-        print!("{pc}");
-    }
-    print!("]");
+    println!("{}", triad_notes(triad));
     let _ = io::stdout().flush();
 }
 
-/// Prints one event's notes as they're triggered -- a fill shows just its
-/// own pitch; a main event shows the new chord's notes plus the melody
-/// note(s) for this step (never shown by the old triad-symbol-only trace).
-fn print_event(event: &Event) {
+/// Prints one event on its own line as it's triggered: a fill shows just
+/// its own pitch; a main event shows `prev -op-> new +melody note(s)` --
+/// `prev` is the previous *main* event's triad (fills don't move it,
+/// mirroring `Pipeline`'s own "fills don't move the harmonic walk" rule).
+/// Every field is padded to its widest possible value so the columns line
+/// up across lines.
+fn print_event(prev: Triad, event: &Event) {
     if event.is_fill {
-        print!(" ~{}~", event.notes[0]);
-        let _ = io::stdout().flush();
-        return;
-    }
-    print!(" -{}-> [", op_name(event.op));
-    for (i, pc) in event.triad.pitch_classes().iter().enumerate() {
-        if i > 0 {
-            print!(" ");
+        println!("  ~{:<PITCH_WIDTH$}~", event.notes[0]);
+    } else {
+        print!("{} -{}-> {}", triad_notes(prev), op_name(event.op), triad_notes(event.triad));
+        for pc in &event.notes {
+            print!(" +{pc:<PITCH_WIDTH$}");
         }
-        print!("{pc}");
-    }
-    print!("]");
-    for pc in &event.notes {
-        print!("+{pc}");
+        println!();
     }
     let _ = io::stdout().flush();
 }
@@ -228,6 +232,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     renderer.start(start);
 
     let mut last_duration = 0.0;
+    let mut prev_triad = start;
     for event in pipeline
         .by_ref()
         .take(STEPS)
@@ -235,7 +240,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         if renderer.wants_realtime_pacing() {
             sleep(Duration::from_secs_f64(event.duration * UNIT_SECONDS));
         }
-        print_event(&event);
+        print_event(prev_triad, &event);
+        if !event.is_fill {
+            prev_triad = event.triad;
+        }
         renderer.render(&event);
         last_duration = event.duration;
     }
@@ -243,7 +251,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     if renderer.wants_realtime_pacing() {
         sleep(Duration::from_secs_f64(last_duration * UNIT_SECONDS));
     }
-    println!();
     renderer.finish()?;
 
     Ok(())
