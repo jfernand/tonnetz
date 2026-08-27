@@ -14,7 +14,7 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use midly::num::{u15, u24, u28, u4, u7};
+use midly::num::{u4, u7, u15, u24, u28};
 use midly::{Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
 use tonnetz_core::{Event, NoteChange, Renderer, Triad, VoiceTracker};
 
@@ -87,25 +87,59 @@ impl MidiRenderer {
     }
 
     fn units_to_ticks(&self, units: f64) -> u32 {
-        (units * self.config.ticks_per_unit as f64).round() as u32
+        (units
+            * self
+                .config
+                .ticks_per_unit as f64)
+            .round() as u32
     }
 
     fn push_change(&mut self, tick: u32, change: NoteChange) {
         if let Some(notes) = change.chord_off {
             for note in notes {
-                self.push_note(tick, true, self.config.chord_channel, note, 0);
+                self.push_note(
+                    tick,
+                    true,
+                    self.config
+                        .chord_channel,
+                    note,
+                    0,
+                );
             }
         }
         if let Some(midi) = change.melody_off {
-            self.push_note(tick, true, self.config.melody_channel, midi, 0);
+            self.push_note(
+                tick,
+                true,
+                self.config
+                    .melody_channel,
+                midi,
+                0,
+            );
         }
         if let Some(notes) = change.chord_on {
             for note in notes {
-                self.push_note(tick, false, self.config.chord_channel, note, self.config.chord_velocity);
+                self.push_note(
+                    tick,
+                    false,
+                    self.config
+                        .chord_channel,
+                    note,
+                    self.config
+                        .chord_velocity,
+                );
             }
         }
         if let Some(midi) = change.melody_on {
-            self.push_note(tick, false, self.config.melody_channel, midi, self.config.melody_velocity);
+            self.push_note(
+                tick,
+                false,
+                self.config
+                    .melody_channel,
+                midi,
+                self.config
+                    .melody_velocity,
+            );
         }
     }
 
@@ -121,22 +155,32 @@ impl MidiRenderer {
                 vel: u7::new(velocity),
             }
         };
-        self.events.push(AbsEvent { tick, is_off, channel, message });
+        self.events
+            .push(AbsEvent {
+                tick,
+                is_off,
+                channel,
+                message,
+            });
     }
 }
 
 impl Renderer for MidiRenderer {
     fn start(&mut self, triad: Triad) {
-        let change = self.voice.start(triad);
+        let change = self
+            .voice
+            .start(triad);
         self.push_change(0, change);
     }
 
     fn render(&mut self, event: &Event) {
         let tick = self.units_to_ticks(event.onset);
         let change = if event.is_fill {
-            self.voice.advance_fill(event.notes[0])
+            self.voice
+                .advance_fill(event.notes[0])
         } else {
-            self.voice.advance(event)
+            self.voice
+                .advance(event)
         };
         self.push_change(tick, change);
         self.last_event_end_units = event.onset + event.duration;
@@ -144,16 +188,23 @@ impl Renderer for MidiRenderer {
 
     fn finish(&mut self) -> Result<(), Box<dyn Error>> {
         let tick = self.units_to_ticks(self.last_event_end_units);
-        let change = self.voice.finish();
+        let change = self
+            .voice
+            .finish();
         self.push_change(tick, change);
 
         // Stable sort: note-offs before note-ons at the same tick (see
         // `AbsEvent::is_off`'s doc comment), otherwise input order, which
         // is already tick-ascending since every event is pushed in the
         // order `render`/`finish` computed it.
-        self.events.sort_by_key(|e| (e.tick, !e.is_off));
+        self.events
+            .sort_by_key(|e| (e.tick, !e.is_off));
 
-        let tempo_us_per_quarter = (self.config.unit_seconds * 1_000_000.0).round() as u32;
+        let tempo_us_per_quarter = (self
+            .config
+            .unit_seconds
+            * 1_000_000.0)
+            .round() as u32;
         let mut track = vec![TrackEvent {
             delta: u28::new(0),
             kind: TrackEventKind::Meta(MetaMessage::Tempo(u24::new(tempo_us_per_quarter))),
@@ -162,7 +213,10 @@ impl Renderer for MidiRenderer {
         let mut last_tick = 0u32;
         for e in &self.events {
             track.push(TrackEvent {
-                delta: u28::new(e.tick.saturating_sub(last_tick)),
+                delta: u28::new(
+                    e.tick
+                        .saturating_sub(last_tick),
+                ),
                 kind: TrackEventKind::Midi {
                     channel: u4::new(e.channel),
                     message: e.message,
@@ -175,9 +229,22 @@ impl Renderer for MidiRenderer {
             kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
         });
 
-        let header = Header::new(Format::SingleTrack, Timing::Metrical(u15::new(self.config.ticks_per_unit)));
-        let smf = Smf { header, tracks: vec![track] };
-        smf.save(&self.config.out_path)?;
+        let header = Header::new(
+            Format::SingleTrack,
+            Timing::Metrical(u15::new(
+                self.config
+                    .ticks_per_unit,
+            )),
+        );
+        let smf = Smf {
+            header,
+            tracks: vec![track],
+        };
+        smf.save(
+            &self
+                .config
+                .out_path,
+        )?;
         Ok(())
     }
 
@@ -213,24 +280,55 @@ mod tests {
         let mut renderer = MidiRenderer::new(test_config(out_path.clone()));
 
         let start = Triad::new(0, Mode::Major);
-        let mut pipeline = Pipeline::new(FreeWalk::new(), MovingVoice, Euclidean::new(3, 8), NoFill, start);
+        let mut pipeline = Pipeline::new(
+            FreeWalk::new(),
+            MovingVoice,
+            Euclidean::new(3, 8),
+            NoFill,
+            start,
+        );
         renderer.start(start);
-        for event in pipeline.by_ref().take(8) {
+        for event in pipeline
+            .by_ref()
+            .take(8)
+        {
             renderer.render(&event);
         }
-        renderer.finish().expect("finish should write the file");
+        renderer
+            .finish()
+            .expect("finish should write the file");
 
         let bytes = std::fs::read(&out_path).expect("file should exist");
         let smf = Smf::parse(&bytes).expect("file should be a valid SMF");
 
-        assert_eq!(smf.header.format, Format::SingleTrack);
-        assert_eq!(smf.header.timing, Timing::Metrical(u15::new(480)));
-        assert_eq!(smf.tracks.len(), 1);
+        assert_eq!(
+            smf.header
+                .format,
+            Format::SingleTrack
+        );
+        assert_eq!(
+            smf.header
+                .timing,
+            Timing::Metrical(u15::new(480))
+        );
+        assert_eq!(
+            smf.tracks
+                .len(),
+            1
+        );
 
         let track = &smf.tracks[0];
         let note_on_count = track
             .iter()
-            .filter(|e| matches!(e.kind, TrackEventKind::Midi { message: MidiMessage::NoteOn { .. }, .. }))
+            .filter(|e| {
+                matches!(
+                    e.kind,
+                    TrackEventKind::Midi {
+                        message: MidiMessage::NoteOn { .. },
+                        ..
+                    }
+                )
+            })
             .count();
         assert!(note_on_count > 0, "expected at least one NoteOn event");
 
@@ -239,8 +337,16 @@ mod tests {
             .any(|e| matches!(e.kind, TrackEventKind::Meta(MetaMessage::Tempo(_))));
         assert!(has_tempo, "expected a tempo meta event");
 
-        let has_end_of_track = matches!(track.last().map(|e| &e.kind), Some(TrackEventKind::Meta(MetaMessage::EndOfTrack)));
-        assert!(has_end_of_track, "expected the track to end with EndOfTrack");
+        let has_end_of_track = matches!(
+            track
+                .last()
+                .map(|e| &e.kind),
+            Some(TrackEventKind::Meta(MetaMessage::EndOfTrack))
+        );
+        assert!(
+            has_end_of_track,
+            "expected the track to end with EndOfTrack"
+        );
 
         // Absolute ticks (running sum of deltas) must be monotonically
         // non-decreasing -- this is what actually proves the sort in

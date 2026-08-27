@@ -54,9 +54,14 @@ impl<R: Rng> FreeWalk<R> {
     }
 
     fn choose(&mut self, exclude: impl Fn(Utt) -> bool) -> Utt {
-        let candidates: Vec<Utt> = PLR.into_iter().filter(|&op| !exclude(op)).collect();
+        let candidates: Vec<Utt> = PLR
+            .into_iter()
+            .filter(|&op| !exclude(op))
+            .collect();
         debug_assert!(!candidates.is_empty());
-        candidates[self.rng.random_range(0..candidates.len())]
+        candidates[self
+            .rng
+            .random_range(0..candidates.len())]
     }
 }
 
@@ -95,7 +100,9 @@ impl<R: Rng> WindowedTabuWalk<R> {
 
 impl<R: Rng> WalkStrategy for WindowedTabuWalk<R> {
     fn next(&mut self, current: Triad, history: &[Triad]) -> (Triad, Utt) {
-        let tabu = &history[history.len().saturating_sub(self.window)..];
+        let tabu = &history[history
+            .len()
+            .saturating_sub(self.window)..];
         let legal: Vec<Utt> = PLR
             .into_iter()
             .filter(|op| !tabu.contains(&op.apply(current)))
@@ -103,15 +110,18 @@ impl<R: Rng> WalkStrategy for WindowedTabuWalk<R> {
 
         let op = if legal.is_empty() {
             // All neighbors are tabu: relax to the least-recently-visited one.
-            *PLR
-                .iter()
+            *PLR.iter()
                 .min_by_key(|op| {
                     let candidate = op.apply(current);
-                    tabu.iter().rposition(|&t| t == candidate).unwrap_or(0)
+                    tabu.iter()
+                        .rposition(|&t| t == candidate)
+                        .unwrap_or(0)
                 })
                 .expect("PLR is non-empty")
         } else {
-            legal[self.rng.random_range(0..legal.len())]
+            legal[self
+                .rng
+                .random_range(0..legal.len())]
         };
         (op.apply(current), op)
     }
@@ -137,7 +147,14 @@ impl Default for HamiltonianCycleWalk {
 
 impl WalkStrategy for HamiltonianCycleWalk {
     fn next(&mut self, current: Triad, _history: &[Triad]) -> (Triad, Utt) {
-        let op = if self.step.is_multiple_of(2) { Utt::R } else { Utt::L };
+        let op = if self
+            .step
+            .is_multiple_of(2)
+        {
+            Utt::R
+        } else {
+            Utt::L
+        };
         self.step += 1;
         (op.apply(current), op)
     }
@@ -147,7 +164,7 @@ impl WalkStrategy for HamiltonianCycleWalk {
 /// (alternating P, L) or octatonic (alternating P, R). P is common to
 /// both, so it's always the op used to resume alternation right after an
 /// escape.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum System {
     Hexatonic,
     Octatonic,
@@ -186,13 +203,18 @@ impl System {
     /// the 4 hexatonic / 3 octatonic systems) needs to be tracked
     /// separately.
     pub fn pitch_classes(self, triad: Triad) -> Vec<PitchClass> {
-        let root = triad.root.0 as i32;
+        let root = triad
+            .root
+            .0 as i32;
         let (modulus, offsets): (i32, &[i32]) = match self {
             System::Hexatonic => (4, &[0, 3, 4, 7, 8, 11]),
             System::Octatonic => (3, &[0, 1, 3, 4, 6, 7, 9, 10]),
         };
         let base = root.rem_euclid(modulus);
-        offsets.iter().map(|&o| PitchClass::new(base + o)).collect()
+        offsets
+            .iter()
+            .map(|&o| PitchClass::new(base + o))
+            .collect()
     }
 }
 
@@ -235,13 +257,27 @@ impl<R: Rng> CycleConfinedWalk<R> {
 
 impl<R: Rng> WalkStrategy for CycleConfinedWalk<R> {
     fn next(&mut self, current: Triad, _history: &[Triad]) -> (Triad, Utt) {
-        let op = if self.rng.random::<f32>() < self.escape_probability {
-            let op = self.system.third_op();
-            self.system = self.system.toggle();
+        let op = if self
+            .rng
+            .random::<f32>()
+            < self.escape_probability
+        {
+            let op = self
+                .system
+                .third_op();
+            self.system = self
+                .system
+                .toggle();
             op
         } else {
-            let pair = self.system.pair();
-            if self.last_op == Some(pair[0]) { pair[1] } else { pair[0] }
+            let pair = self
+                .system
+                .pair();
+            if self.last_op == Some(pair[0]) {
+                pair[1]
+            } else {
+                pair[0]
+            }
         };
         self.last_op = Some(op);
         (op.apply(current), op)
@@ -292,10 +328,15 @@ mod tests {
         let mut history = vec![t];
         for _ in 0..200 {
             let (next, _) = walk.next(t, &history);
-            let tabu = &history[history.len().saturating_sub(3)..];
+            let tabu = &history[history
+                .len()
+                .saturating_sub(3)..];
             // Only guaranteed when a legal (non-tabu) neighbor existed;
             // the relax-to-least-recent fallback can otherwise revisit.
-            if PLR.iter().any(|op| !tabu.contains(&op.apply(t))) {
+            if PLR
+                .iter()
+                .any(|op| !tabu.contains(&op.apply(t)))
+            {
                 assert!(!tabu.contains(&next));
             }
             history.push(next);
@@ -315,39 +356,65 @@ mod tests {
             seen.push(t);
         }
         assert_eq!(t, start);
-        assert_eq!(seen[..24].iter().collect::<std::collections::HashSet<_>>().len(), 24);
+        assert_eq!(
+            seen[..24]
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            24
+        );
     }
 
     #[test]
     fn cycle_confined_walk_with_zero_escape_stays_on_the_hexatonic_6_cycle() {
-        let mut walk = CycleConfinedWalk::with_rng(System::Hexatonic, 0.0, StdRng::seed_from_u64(1));
+        let mut walk =
+            CycleConfinedWalk::with_rng(System::Hexatonic, 0.0, StdRng::seed_from_u64(1));
         let start = Triad::new(0, Mode::Major);
         let mut t = start;
         let mut seen = vec![t];
         for _ in 0..6 {
             let (next, op) = walk.next(t, &seen);
-            assert!(op == Utt::P || op == Utt::L, "hexatonic confinement must not use R");
+            assert!(
+                op == Utt::P || op == Utt::L,
+                "hexatonic confinement must not use R"
+            );
             t = next;
             seen.push(t);
         }
         assert_eq!(t, start);
-        assert_eq!(seen[..6].iter().collect::<std::collections::HashSet<_>>().len(), 6);
+        assert_eq!(
+            seen[..6]
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            6
+        );
     }
 
     #[test]
     fn cycle_confined_walk_with_zero_escape_stays_on_the_octatonic_8_cycle() {
-        let mut walk = CycleConfinedWalk::with_rng(System::Octatonic, 0.0, StdRng::seed_from_u64(1));
+        let mut walk =
+            CycleConfinedWalk::with_rng(System::Octatonic, 0.0, StdRng::seed_from_u64(1));
         let start = Triad::new(0, Mode::Major);
         let mut t = start;
         let mut seen = vec![t];
         for _ in 0..8 {
             let (next, op) = walk.next(t, &seen);
-            assert!(op == Utt::P || op == Utt::R, "octatonic confinement must not use L");
+            assert!(
+                op == Utt::P || op == Utt::R,
+                "octatonic confinement must not use L"
+            );
             t = next;
             seen.push(t);
         }
         assert_eq!(t, start);
-        assert_eq!(seen[..8].iter().collect::<std::collections::HashSet<_>>().len(), 8);
+        assert_eq!(
+            seen[..8]
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len(),
+            8
+        );
     }
 
     #[test]
@@ -355,7 +422,8 @@ mod tests {
         // Escaping every single step alternates R (hexatonic's third op)
         // and L (octatonic's third op) while toggling system each time --
         // exactly the R/L Hamiltonian walk, starting from Hexatonic.
-        let mut confined = CycleConfinedWalk::with_rng(System::Hexatonic, 1.0, StdRng::seed_from_u64(99));
+        let mut confined =
+            CycleConfinedWalk::with_rng(System::Hexatonic, 1.0, StdRng::seed_from_u64(99));
         let mut hamiltonian = HamiltonianCycleWalk::new();
         let mut t = Triad::new(0, Mode::Major);
         for _ in 0..24 {
@@ -375,7 +443,8 @@ mod tests {
 
     #[test]
     fn cycle_confined_walk_reports_its_current_system() {
-        let mut walk = CycleConfinedWalk::with_rng(System::Hexatonic, 1.0, StdRng::seed_from_u64(3));
+        let mut walk =
+            CycleConfinedWalk::with_rng(System::Hexatonic, 1.0, StdRng::seed_from_u64(3));
         assert_eq!(walk.current_system(), Some(System::Hexatonic));
         let t = Triad::new(0, Mode::Major);
         walk.next(t, &[]); // full escape probability guarantees a toggle
@@ -399,8 +468,14 @@ mod tests {
     fn hexatonic_pitch_classes_are_shared_across_the_whole_cycle() {
         let from_ab_major = System::Hexatonic.pitch_classes(Triad::new(8, Mode::Major));
         let from_c_major = System::Hexatonic.pitch_classes(Triad::new(0, Mode::Major));
-        let mut a: Vec<u8> = from_ab_major.into_iter().map(|pc| pc.0).collect();
-        let mut b: Vec<u8> = from_c_major.into_iter().map(|pc| pc.0).collect();
+        let mut a: Vec<u8> = from_ab_major
+            .into_iter()
+            .map(|pc| pc.0)
+            .collect();
+        let mut b: Vec<u8> = from_c_major
+            .into_iter()
+            .map(|pc| pc.0)
+            .collect();
         a.sort();
         b.sort();
         assert_eq!(a, b);
@@ -420,7 +495,8 @@ mod tests {
 
     #[test]
     fn cycle_confined_walk_never_repeats_the_last_op() {
-        let mut walk = CycleConfinedWalk::with_rng(System::Hexatonic, 0.3, StdRng::seed_from_u64(2024));
+        let mut walk =
+            CycleConfinedWalk::with_rng(System::Hexatonic, 0.3, StdRng::seed_from_u64(2024));
         let mut t = Triad::new(0, Mode::Major);
         let mut last_op = None;
         for _ in 0..500 {

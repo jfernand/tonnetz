@@ -18,11 +18,13 @@ pub use fill::{ArpeggioFill, FillStrategy, NoFill};
 pub use melody::{MelodyStrategy, MovingVoice, RollingWindowScale, SystemFixedScale, TightScale};
 pub use pipeline::{Event, Pipeline, Renderer};
 pub use rhythm::{Euclidean, FixedPulse, RhythmStrategy, WindowedDurations, bjorklund};
-pub use voice::{nearest_midi_note, triad_midi_notes, NoteChange, VoiceTracker};
-pub use walk::{CycleConfinedWalk, FreeWalk, HamiltonianCycleWalk, System, WalkStrategy, WindowedTabuWalk, PLR};
+pub use voice::{NoteChange, VoiceTracker, nearest_midi_note, triad_midi_notes};
+pub use walk::{
+    CycleConfinedWalk, FreeWalk, HamiltonianCycleWalk, PLR, System, WalkStrategy, WindowedTabuWalk,
+};
 
 /// A pitch class, 0-11, where 0 = C. Arithmetic wraps mod 12.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct PitchClass(pub u8);
 
 const NOTE_NAMES: [&str; 12] = [
@@ -52,7 +54,7 @@ impl std::fmt::Display for PitchClass {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Mode {
     Major,
     Minor,
@@ -68,7 +70,7 @@ impl Mode {
 }
 
 /// A major or minor triad, identified by root and mode alone (24 total).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Triad {
     pub root: PitchClass,
     pub mode: Mode,
@@ -107,7 +109,7 @@ impl std::fmt::Display for Triad {
 }
 
 /// Whether a `Utt` preserves (`Plus`) or flips (`Minus`) triad mode.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum Sign {
     Plus,
     Minus,
@@ -115,7 +117,11 @@ pub enum Sign {
 
 impl Sign {
     fn xor(self, other: Sign) -> Sign {
-        if self == other { Sign::Plus } else { Sign::Minus }
+        if self == other {
+            Sign::Plus
+        } else {
+            Sign::Minus
+        }
     }
 }
 
@@ -126,7 +132,7 @@ impl Sign {
 /// group has order 288 (2 x 12 x 12) and is a strict superset, so new
 /// non-PLR transformations can be added as more `Utt` values without
 /// changing this type.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Utt {
     pub sign: Sign,
     pub m: i32,
@@ -175,7 +181,13 @@ impl Utt {
             Mode::Major => (self.m, self.sign == Sign::Minus),
             Mode::Minor => (self.n, self.sign == Sign::Minus),
         };
-        let mode = if flips { triad.mode.flip() } else { triad.mode };
+        let mode = if flips {
+            triad
+                .mode
+                .flip()
+        } else {
+            triad.mode
+        };
         Triad {
             root: triad.root + offset,
             mode,
@@ -185,7 +197,9 @@ impl Utt {
     /// The UTT equivalent to applying `other` then `self`:
     /// `self.compose(other).apply(t) == self.apply(other.apply(t))`.
     pub fn compose(self, other: Utt) -> Utt {
-        let sign = self.sign.xor(other.sign);
+        let sign = self
+            .sign
+            .xor(other.sign);
         // When `other` flips mode, the triad's mode at the point `self` is
         // applied has already been swapped, so `self`'s major/minor offsets
         // must be swapped too before combining with `other`'s.
@@ -215,12 +229,30 @@ mod tests {
     #[test]
     fn plr_matches_cohn_table() {
         for r in 0..12 {
-            assert_eq!(Utt::P.apply(Triad::new(r, Mode::Major)), Triad::new(r, Mode::Minor));
-            assert_eq!(Utt::P.apply(Triad::new(r, Mode::Minor)), Triad::new(r, Mode::Major));
-            assert_eq!(Utt::L.apply(Triad::new(r, Mode::Major)), Triad::new(r + 4, Mode::Minor));
-            assert_eq!(Utt::L.apply(Triad::new(r, Mode::Minor)), Triad::new(r - 4, Mode::Major));
-            assert_eq!(Utt::R.apply(Triad::new(r, Mode::Major)), Triad::new(r + 9, Mode::Minor));
-            assert_eq!(Utt::R.apply(Triad::new(r, Mode::Minor)), Triad::new(r + 3, Mode::Major));
+            assert_eq!(
+                Utt::P.apply(Triad::new(r, Mode::Major)),
+                Triad::new(r, Mode::Minor)
+            );
+            assert_eq!(
+                Utt::P.apply(Triad::new(r, Mode::Minor)),
+                Triad::new(r, Mode::Major)
+            );
+            assert_eq!(
+                Utt::L.apply(Triad::new(r, Mode::Major)),
+                Triad::new(r + 4, Mode::Minor)
+            );
+            assert_eq!(
+                Utt::L.apply(Triad::new(r, Mode::Minor)),
+                Triad::new(r - 4, Mode::Major)
+            );
+            assert_eq!(
+                Utt::R.apply(Triad::new(r, Mode::Major)),
+                Triad::new(r + 9, Mode::Minor)
+            );
+            assert_eq!(
+                Utt::R.apply(Triad::new(r, Mode::Minor)),
+                Triad::new(r + 3, Mode::Major)
+            );
         }
     }
 
@@ -259,17 +291,26 @@ mod tests {
 
     #[test]
     fn hexatonic_cycle_has_length_6() {
-        assert_eq!(cycle_length(Triad::new(0, Mode::Major), [Utt::P, Utt::L]), 6);
+        assert_eq!(
+            cycle_length(Triad::new(0, Mode::Major), [Utt::P, Utt::L]),
+            6
+        );
     }
 
     #[test]
     fn octatonic_cycle_has_length_8() {
-        assert_eq!(cycle_length(Triad::new(0, Mode::Major), [Utt::P, Utt::R]), 8);
+        assert_eq!(
+            cycle_length(Triad::new(0, Mode::Major), [Utt::P, Utt::R]),
+            8
+        );
     }
 
     #[test]
     fn hamiltonian_cycle_has_length_24() {
-        assert_eq!(cycle_length(Triad::new(0, Mode::Major), [Utt::R, Utt::L]), 24);
+        assert_eq!(
+            cycle_length(Triad::new(0, Mode::Major), [Utt::R, Utt::L]),
+            24
+        );
     }
 
     // Alternating R, L from C major, as attested in Beethoven's 9th Symphony,
@@ -306,9 +347,16 @@ mod tests {
         ];
 
         let mut t = Triad::new(0, Mode::Major);
-        for (i, &(root, mode)) in expected.iter().enumerate() {
+        for (i, &(root, mode)) in expected
+            .iter()
+            .enumerate()
+        {
             assert_eq!(t, Triad::new(root, mode), "step {i}");
-            t = if i % 2 == 0 { Utt::R.apply(t) } else { Utt::L.apply(t) };
+            t = if i % 2 == 0 {
+                Utt::R.apply(t)
+            } else {
+                Utt::L.apply(t)
+            };
         }
         assert_eq!(t, Triad::new(0, Mode::Major)); // back home after 24 steps
     }
@@ -334,7 +382,11 @@ mod tests {
             for &b in &ops {
                 let composed = a.compose(b);
                 for t in all_triads() {
-                    assert_eq!(composed.apply(t), a.apply(b.apply(t)), "{a:?} . {b:?} on {t:?}");
+                    assert_eq!(
+                        composed.apply(t),
+                        a.apply(b.apply(t)),
+                        "{a:?} . {b:?} on {t:?}"
+                    );
                 }
             }
         }

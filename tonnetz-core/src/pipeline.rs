@@ -72,44 +72,70 @@ impl<W: WalkStrategy, M: MelodyStrategy, R: RhythmStrategy, F: FillStrategy> Pip
     }
 }
 
-impl<W: WalkStrategy, M: MelodyStrategy, R: RhythmStrategy, F: FillStrategy> Iterator for Pipeline<W, M, R, F> {
+impl<W: WalkStrategy, M: MelodyStrategy, R: RhythmStrategy, F: FillStrategy> Iterator
+    for Pipeline<W, M, R, F>
+{
     type Item = Event;
 
     fn next(&mut self) -> Option<Event> {
-        if let Some(fill_event) = self.pending_fills.pop_front() {
+        if let Some(fill_event) = self
+            .pending_fills
+            .pop_front()
+        {
             return Some(fill_event);
         }
 
         let prev = self.triad;
-        let (next, op) = self.walk.next(prev, &self.history);
-        if let Some(system) = self.walk.current_system() {
-            self.melody.set_system(system);
+        let (next, op) = self
+            .walk
+            .next(prev, &self.history);
+        if let Some(system) = self
+            .walk
+            .current_system()
+        {
+            self.melody
+                .set_system(system);
         }
-        let notes = self.melody.notes(prev, next, op, &self.history);
-        let (onset, duration) = self.rhythm.timing(self.event_index);
+        let notes = self
+            .melody
+            .notes(prev, next, op, &self.history);
+        let (onset, duration) = self
+            .rhythm
+            .timing(self.event_index);
 
-        self.history.push(next);
+        self.history
+            .push(next);
         self.triad = next;
         self.event_index += 1;
 
-        let mut fills = self.fill.fills(next, duration);
-        fills.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("fill fractions must not be NaN"));
+        let mut fills = self
+            .fill
+            .fills(next, duration);
+        fills.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .expect("fill fractions must not be NaN")
+        });
 
         let main_end = onset + duration;
-        let main_duration = fills.first().map_or(duration, |&(frac, _)| frac * duration);
+        let main_duration = fills
+            .first()
+            .map_or(duration, |&(frac, _)| frac * duration);
 
         for i in 0..fills.len() {
             let (frac, pitch) = fills[i];
             let fill_onset = onset + frac * duration;
-            let next_onset = fills.get(i + 1).map_or(main_end, |&(next_frac, _)| onset + next_frac * duration);
-            self.pending_fills.push_back(Event {
-                triad: next,
-                op: Utt::IDENTITY,
-                notes: vec![pitch],
-                onset: fill_onset,
-                duration: next_onset - fill_onset,
-                is_fill: true,
-            });
+            let next_onset = fills
+                .get(i + 1)
+                .map_or(main_end, |&(next_frac, _)| onset + next_frac * duration);
+            self.pending_fills
+                .push_back(Event {
+                    triad: next,
+                    op: Utt::IDENTITY,
+                    notes: vec![pitch],
+                    onset: fill_onset,
+                    duration: next_onset - fill_onset,
+                    is_fill: true,
+                });
         }
 
         Some(Event {
@@ -166,7 +192,8 @@ pub trait Renderer {
 mod tests {
     use super::*;
     use crate::{
-        CycleConfinedWalk, FreeWalk, HamiltonianCycleWalk, Mode, MovingVoice, NoFill, System, SystemFixedScale, Utt,
+        CycleConfinedWalk, FreeWalk, HamiltonianCycleWalk, Mode, MovingVoice, NoFill, System,
+        SystemFixedScale, Utt,
     };
     use rand::SeedableRng;
     use rand::rngs::StdRng;
@@ -195,7 +222,9 @@ mod tests {
         let mut manual_triad = start;
 
         for i in 0..20 {
-            let event = pipeline.next().unwrap();
+            let event = pipeline
+                .next()
+                .unwrap();
 
             let (next, op) = manual_walk.next(manual_triad, &manual_history);
             let notes = manual_melody.notes(manual_triad, next, op, &manual_history);
@@ -224,10 +253,15 @@ mod tests {
             NoFill,
             Triad::new(0, Mode::Major),
         );
-        for event in pipeline.by_ref().take(6) {
+        for event in pipeline
+            .by_ref()
+            .take(6)
+        {
             let mut expected: Vec<_> = System::Hexatonic.pitch_classes(event.triad);
             expected.sort_by_key(|pc| pc.0);
-            let mut notes = event.notes.clone();
+            let mut notes = event
+                .notes
+                .clone();
             notes.sort_by_key(|pc| pc.0);
             assert_eq!(notes, expected);
         }
@@ -242,8 +276,17 @@ mod tests {
             NoFill,
             Triad::new(0, Mode::Major),
         );
-        for event in pipeline.by_ref().take(24) {
-            assert_eq!(event.notes.len(), 1, "P/L/R always move exactly one voice");
+        for event in pipeline
+            .by_ref()
+            .take(24)
+        {
+            assert_eq!(
+                event
+                    .notes
+                    .len(),
+                1,
+                "P/L/R always move exactly one voice"
+            );
             assert!(matches!(event.op, Utt::R | Utt::L));
         }
     }
@@ -268,27 +311,41 @@ mod tests {
         // Step 0: main event's own duration shrinks to reach the first
         // fill (0.25); fills chain legato from there to the next main
         // event's onset (1.0).
-        let main0 = pipeline.next().unwrap();
+        let main0 = pipeline
+            .next()
+            .unwrap();
         assert!(!main0.is_fill);
         assert_eq!((main0.onset, main0.duration), (0.0, 0.25));
 
-        let fill0a = pipeline.next().unwrap();
+        let fill0a = pipeline
+            .next()
+            .unwrap();
         assert!(fill0a.is_fill);
         assert_eq!(fill0a.op, Utt::IDENTITY);
-        assert_eq!(fill0a.triad, main0.triad, "fills don't move the harmonic walk");
+        assert_eq!(
+            fill0a.triad, main0.triad,
+            "fills don't move the harmonic walk"
+        );
         assert_eq!(fill0a.notes, vec![PitchClass::new(1)]);
         assert_eq!((fill0a.onset, fill0a.duration), (0.25, 0.5));
 
-        let fill0b = pipeline.next().unwrap();
+        let fill0b = pipeline
+            .next()
+            .unwrap();
         assert!(fill0b.is_fill);
         assert_eq!(fill0b.notes, vec![PitchClass::new(2)]);
         assert_eq!((fill0b.onset, fill0b.duration), (0.75, 0.25));
 
         // Next main event picks up exactly where the last fill left off,
         // with its own full duration shrunk the same way.
-        let main1 = pipeline.next().unwrap();
+        let main1 = pipeline
+            .next()
+            .unwrap();
         assert!(!main1.is_fill);
         assert_eq!((main1.onset, main1.duration), (1.0, 0.25));
-        assert_ne!(main1.triad, main0.triad, "the walk still advances on main events");
+        assert_ne!(
+            main1.triad, main0.triad,
+            "the walk still advances on main events"
+        );
     }
 }

@@ -62,18 +62,35 @@ mod tests {
         let c_major = Triad::new(0, Mode::Major); // {C=0, E=4, G=7}
         let mut fill = ArpeggioFill { count: 3 };
         let fills = fill.fills(c_major, 1.0);
-        let pitches: Vec<PitchClass> = fills.iter().map(|&(_, pc)| pc).collect();
-        assert_eq!(pitches, vec![PitchClass::new(4), PitchClass::new(7), PitchClass::new(0)]);
+        let pitches: Vec<PitchClass> = fills
+            .iter()
+            .map(|&(_, pc)| pc)
+            .collect();
+        assert_eq!(
+            pitches,
+            vec![PitchClass::new(4), PitchClass::new(7), PitchClass::new(0)]
+        );
     }
 
     #[test]
     fn arpeggio_fill_places_count_points_evenly_and_ascending() {
         let mut fill = ArpeggioFill { count: 2 };
         let fills = fill.fills(Triad::new(0, Mode::Major), 1.0);
-        let fractions: Vec<f64> = fills.iter().map(|&(f, _)| f).collect();
+        let fractions: Vec<f64> = fills
+            .iter()
+            .map(|&(f, _)| f)
+            .collect();
         assert_eq!(fractions, vec![1.0 / 3.0, 2.0 / 3.0]);
-        assert!(fractions.iter().all(|&f| f > 0.0 && f < 1.0));
-        assert!(fractions.windows(2).all(|w| w[0] < w[1]));
+        assert!(
+            fractions
+                .iter()
+                .all(|&f| f > 0.0 && f < 1.0)
+        );
+        assert!(
+            fractions
+                .windows(2)
+                .all(|w| w[0] < w[1])
+        );
     }
 
     #[test]

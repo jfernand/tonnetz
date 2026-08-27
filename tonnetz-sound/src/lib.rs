@@ -43,10 +43,16 @@ impl SoundBackend {
         piano_soundfont_path: impl AsRef<Path>,
         channel: i32,
     ) -> Result<Self, Box<dyn Error>> {
-        Self::build(soundfont_path, Some((piano_soundfont_path.as_ref(), channel)))
+        Self::build(
+            soundfont_path,
+            Some((piano_soundfont_path.as_ref(), channel)),
+        )
     }
 
-    fn build(soundfont_path: impl AsRef<Path>, piano_override: Option<(&Path, i32)>) -> Result<Self, Box<dyn Error>> {
+    fn build(
+        soundfont_path: impl AsRef<Path>,
+        piano_override: Option<(&Path, i32)>,
+    ) -> Result<Self, Box<dyn Error>> {
         let host = cpal::default_host();
         let device = host
             .default_output_device()
@@ -74,8 +80,14 @@ impl SoundBackend {
                     left.resize(frames, 0.0);
                     right.resize(frames, 0.0);
                 }
-                render_synth.lock().unwrap().render(&mut left, &mut right);
-                for (i, frame) in data.chunks_mut(channels).enumerate() {
+                render_synth
+                    .lock()
+                    .unwrap()
+                    .render(&mut left, &mut right);
+                for (i, frame) in data
+                    .chunks_mut(channels)
+                    .enumerate()
+                {
                     for sample in frame.iter_mut() {
                         *sample = left[i]; // mono-mixed for simplicity
                     }
@@ -87,20 +99,32 @@ impl SoundBackend {
         )?;
         stream.play()?;
 
-        Ok(SoundBackend { synth, _stream: stream })
+        Ok(SoundBackend {
+            synth,
+            _stream: stream,
+        })
     }
 
     /// Selects a General MIDI program (instrument) on the given channel.
     pub fn set_program(&self, channel: i32, program: i32) {
-        self.synth.lock().unwrap().program_change(channel, program);
+        self.synth
+            .lock()
+            .unwrap()
+            .program_change(channel, program);
     }
 
     pub fn note_on(&self, channel: i32, key: i32, velocity: i32) {
-        self.synth.lock().unwrap().note_on(channel, key, velocity);
+        self.synth
+            .lock()
+            .unwrap()
+            .note_on(channel, key, velocity);
     }
 
     pub fn note_off(&self, channel: i32, key: i32) {
-        self.synth.lock().unwrap().note_off(channel, key);
+        self.synth
+            .lock()
+            .unwrap()
+            .note_off(channel, key);
     }
 
     /// Starts a triad's three notes (root, third, fifth in close position
@@ -149,46 +173,80 @@ impl SynthRenderer {
         backend.set_program(config.chord_channel, config.chord_program);
         backend.set_program(config.melody_channel, config.melody_program);
         let voice = VoiceTracker::new(config.chord_root_midi, config.melody_start_midi);
-        SynthRenderer { backend, config, voice }
+        SynthRenderer {
+            backend,
+            config,
+            voice,
+        }
     }
 
     fn apply(&self, change: tonnetz_core::NoteChange) {
         if let Some(notes) = change.chord_off {
             for note in notes {
-                self.backend.note_off(self.config.chord_channel, note);
+                self.backend
+                    .note_off(
+                        self.config
+                            .chord_channel,
+                        note,
+                    );
             }
         }
         if let Some(midi) = change.melody_off {
-            self.backend.note_off(self.config.melody_channel, midi);
+            self.backend
+                .note_off(
+                    self.config
+                        .melody_channel,
+                    midi,
+                );
         }
         if let Some(notes) = change.chord_on {
             for note in notes {
-                self.backend.note_on(self.config.chord_channel, note, self.config.chord_velocity);
+                self.backend
+                    .note_on(
+                        self.config
+                            .chord_channel,
+                        note,
+                        self.config
+                            .chord_velocity,
+                    );
             }
         }
         if let Some(midi) = change.melody_on {
-            self.backend.note_on(self.config.melody_channel, midi, self.config.melody_velocity);
+            self.backend
+                .note_on(
+                    self.config
+                        .melody_channel,
+                    midi,
+                    self.config
+                        .melody_velocity,
+                );
         }
     }
 }
 
 impl Renderer for SynthRenderer {
     fn start(&mut self, triad: Triad) {
-        let change = self.voice.start(triad);
+        let change = self
+            .voice
+            .start(triad);
         self.apply(change);
     }
 
     fn render(&mut self, event: &Event) {
         let change = if event.is_fill {
-            self.voice.advance_fill(event.notes[0])
+            self.voice
+                .advance_fill(event.notes[0])
         } else {
-            self.voice.advance(event)
+            self.voice
+                .advance(event)
         };
         self.apply(change);
     }
 
     fn finish(&mut self) -> Result<(), Box<dyn Error>> {
-        let change = self.voice.finish();
+        let change = self
+            .voice
+            .finish();
         self.apply(change);
         Ok(())
     }

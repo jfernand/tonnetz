@@ -47,7 +47,10 @@ pub struct WavRenderer {
 }
 
 impl WavRenderer {
-    pub fn new(soundfont_path: impl AsRef<Path>, config: WavRendererConfig) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        soundfont_path: impl AsRef<Path>,
+        config: WavRendererConfig,
+    ) -> Result<Self, Box<dyn Error>> {
         Self::build(soundfont_path, None, config)
     }
 
@@ -60,7 +63,11 @@ impl WavRenderer {
         channel: i32,
         config: WavRendererConfig,
     ) -> Result<Self, Box<dyn Error>> {
-        Self::build(soundfont_path, Some((piano_soundfont_path.as_ref(), channel)), config)
+        Self::build(
+            soundfont_path,
+            Some((piano_soundfont_path.as_ref(), channel)),
+            config,
+        )
     }
 
     fn build(
@@ -101,30 +108,55 @@ impl WavRenderer {
         let n = target_sample - self.rendered_samples;
         let mut left = vec![0.0f32; n];
         let mut right = vec![0.0f32; n];
-        self.synthesizer.render(&mut left, &mut right);
-        self.left.extend_from_slice(&left);
-        self.right.extend_from_slice(&right);
+        self.synthesizer
+            .render(&mut left, &mut right);
+        self.left
+            .extend_from_slice(&left);
+        self.right
+            .extend_from_slice(&right);
         self.rendered_samples = target_sample;
     }
 
     fn apply(&mut self, change: NoteChange) {
         if let Some(notes) = change.chord_off {
             for note in notes {
-                self.synthesizer.note_off(self.config.chord_channel, note);
+                self.synthesizer
+                    .note_off(
+                        self.config
+                            .chord_channel,
+                        note,
+                    );
             }
         }
         if let Some(midi) = change.melody_off {
-            self.synthesizer.note_off(self.config.melody_channel, midi);
+            self.synthesizer
+                .note_off(
+                    self.config
+                        .melody_channel,
+                    midi,
+                );
         }
         if let Some(notes) = change.chord_on {
             for note in notes {
                 self.synthesizer
-                    .note_on(self.config.chord_channel, note, self.config.chord_velocity);
+                    .note_on(
+                        self.config
+                            .chord_channel,
+                        note,
+                        self.config
+                            .chord_velocity,
+                    );
             }
         }
         if let Some(midi) = change.melody_on {
             self.synthesizer
-                .note_on(self.config.melody_channel, midi, self.config.melody_velocity);
+                .note_on(
+                    self.config
+                        .melody_channel,
+                    midi,
+                    self.config
+                        .melody_velocity,
+                );
         }
     }
 
@@ -135,16 +167,20 @@ impl WavRenderer {
 
 impl Renderer for WavRenderer {
     fn start(&mut self, triad: Triad) {
-        let change = self.voice.start(triad);
+        let change = self
+            .voice
+            .start(triad);
         self.apply(change);
     }
 
     fn render(&mut self, event: &Event) {
         self.advance_to(self.units_to_samples(event.onset));
         let change = if event.is_fill {
-            self.voice.advance_fill(event.notes[0])
+            self.voice
+                .advance_fill(event.notes[0])
         } else {
-            self.voice.advance(event)
+            self.voice
+                .advance(event)
         };
         self.apply(change);
         self.last_event_end_units = event.onset + event.duration;
@@ -152,20 +188,42 @@ impl Renderer for WavRenderer {
 
     fn finish(&mut self) -> Result<(), Box<dyn Error>> {
         self.advance_to(self.units_to_samples(self.last_event_end_units));
-        let change = self.voice.finish();
+        let change = self
+            .voice
+            .finish();
         self.apply(change);
 
-        let release_samples = (self.config.release_seconds * self.config.sample_rate as f64).round() as usize;
+        let release_samples = (self
+            .config
+            .release_seconds
+            * self
+                .config
+                .sample_rate as f64)
+            .round() as usize;
         self.advance_to(self.rendered_samples + release_samples);
 
         let spec = hound::WavSpec {
             channels: 2,
-            sample_rate: self.config.sample_rate as u32,
+            sample_rate: self
+                .config
+                .sample_rate as u32,
             bits_per_sample: 32,
             sample_format: hound::SampleFormat::Float,
         };
-        let mut writer = hound::WavWriter::create(&self.config.out_path, spec)?;
-        for (&l, &r) in self.left.iter().zip(self.right.iter()) {
+        let mut writer = hound::WavWriter::create(
+            &self
+                .config
+                .out_path,
+            spec,
+        )?;
+        for (&l, &r) in self
+            .left
+            .iter()
+            .zip(
+                self.right
+                    .iter(),
+            )
+        {
             writer.write_sample(l)?;
             writer.write_sample(r)?;
         }
@@ -184,7 +242,11 @@ mod tests {
     use tonnetz_core::{Euclidean, FreeWalk, Mode, MovingVoice, NoFill, Pipeline};
 
     fn soundfont_path() -> String {
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../assets/soundfonts/GeneralUser-GS.sf2").to_string()
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../assets/soundfonts/GeneralUser-GS.sf2"
+        )
+        .to_string()
     }
 
     fn test_config(out_path: PathBuf) -> WavRendererConfig {
@@ -210,17 +272,29 @@ mod tests {
         let config = test_config(out_path.clone());
         let unit_seconds = config.unit_seconds;
         let sample_rate = config.sample_rate;
-        let mut renderer = WavRenderer::new(soundfont_path(), config).expect("renderer should construct");
+        let mut renderer =
+            WavRenderer::new(soundfont_path(), config).expect("renderer should construct");
 
         let start = Triad::new(0, Mode::Major);
-        let mut pipeline = Pipeline::new(FreeWalk::new(), MovingVoice, Euclidean::new(3, 8), NoFill, start);
+        let mut pipeline = Pipeline::new(
+            FreeWalk::new(),
+            MovingVoice,
+            Euclidean::new(3, 8),
+            NoFill,
+            start,
+        );
         renderer.start(start);
         let mut last_end = 0.0;
-        for event in pipeline.by_ref().take(8) {
+        for event in pipeline
+            .by_ref()
+            .take(8)
+        {
             last_end = event.onset + event.duration;
             renderer.render(&event);
         }
-        renderer.finish().expect("finish should write the file");
+        renderer
+            .finish()
+            .expect("finish should write the file");
 
         let reader = hound::WavReader::open(&out_path).expect("file should be a valid WAV");
         let spec = reader.spec();
@@ -228,7 +302,10 @@ mod tests {
         assert_eq!(spec.sample_rate, sample_rate as u32);
         assert_eq!(spec.sample_format, hound::SampleFormat::Float);
 
-        let samples: Vec<f32> = reader.into_samples::<f32>().map(|s| s.unwrap()).collect();
+        let samples: Vec<f32> = reader
+            .into_samples::<f32>()
+            .map(|s| s.unwrap())
+            .collect();
         assert!(!samples.is_empty());
 
         let expected_seconds = last_end * unit_seconds + 0.2;
@@ -238,8 +315,13 @@ mod tests {
             "expected ~{expected_seconds}s, got {actual_seconds}s"
         );
 
-        let max_amplitude = samples.iter().fold(0.0f32, |acc, &s| acc.max(s.abs()));
-        assert!(max_amplitude > 0.01, "expected audible output, max amplitude was {max_amplitude}");
+        let max_amplitude = samples
+            .iter()
+            .fold(0.0f32, |acc, &s| acc.max(s.abs()));
+        assert!(
+            max_amplitude > 0.01,
+            "expected audible output, max amplitude was {max_amplitude}"
+        );
 
         let _ = std::fs::remove_file(&out_path);
     }

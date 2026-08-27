@@ -13,9 +13,10 @@
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use tonnetz_core::{
-    ArpeggioFill, CycleConfinedWalk, Euclidean, FillStrategy, FixedPulse, FreeWalk, HamiltonianCycleWalk,
-    MelodyStrategy, MovingVoice, NoFill, Pipeline, PitchClass, RhythmStrategy, RollingWindowScale, System,
-    SystemFixedScale, TightScale, Triad, Utt, WalkStrategy, WindowedDurations, WindowedTabuWalk,
+    ArpeggioFill, CycleConfinedWalk, Euclidean, FillStrategy, FixedPulse, FreeWalk,
+    HamiltonianCycleWalk, MelodyStrategy, MovingVoice, NoFill, Pipeline, PitchClass,
+    RhythmStrategy, RollingWindowScale, System, SystemFixedScale, TightScale, Triad, Utt,
+    WalkStrategy, WindowedDurations, WindowedTabuWalk,
 };
 
 pub enum AnyWalk {
@@ -152,7 +153,11 @@ pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, AnyFill, 
     let mut rng = StdRng::seed_from_u64(seed);
 
     let (walk, walk_desc, walk_code) = match rng.random_range(0..4) {
-        0 => (AnyWalk::Free(FreeWalk::with_rng(sub_rng(&mut rng))), "FreeWalk".to_string(), "F".to_string()),
+        0 => (
+            AnyWalk::Free(FreeWalk::with_rng(sub_rng(&mut rng))),
+            "FreeWalk".to_string(),
+            "F".to_string(),
+        ),
         1 => {
             let window = rng.random_range(2..=5);
             (
@@ -167,21 +172,50 @@ pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, AnyFill, 
             "H".to_string(),
         ),
         _ => {
-            let system = if rng.random_bool(0.5) { System::Hexatonic } else { System::Octatonic };
+            let system = if rng.random_bool(0.5) {
+                System::Hexatonic
+            } else {
+                System::Octatonic
+            };
             let escape_probability = rng.random_range(0.05..=0.35);
-            let system_letter = if system == System::Hexatonic { "H" } else { "O" };
+            let system_letter = if system == System::Hexatonic {
+                "H"
+            } else {
+                "O"
+            };
             (
-                AnyWalk::Confined(CycleConfinedWalk::with_rng(system, escape_probability, sub_rng(&mut rng))),
-                format!("CycleConfinedWalk {{ system: {system:?}, escape_probability: {escape_probability:.2} }}"),
-                format!("C{system_letter}{}", (escape_probability * 100.0).round() as i32),
+                AnyWalk::Confined(CycleConfinedWalk::with_rng(
+                    system,
+                    escape_probability,
+                    sub_rng(&mut rng),
+                )),
+                format!(
+                    "CycleConfinedWalk {{ system: {system:?}, escape_probability: {escape_probability:.2} }}"
+                ),
+                format!(
+                    "C{system_letter}{}",
+                    (escape_probability * 100.0).round() as i32
+                ),
             )
         }
     };
 
-    let melody_pool = if matches!(walk, AnyWalk::Confined(_)) { 4 } else { 3 };
+    let melody_pool = if matches!(walk, AnyWalk::Confined(_)) {
+        4
+    } else {
+        3
+    };
     let (melody, melody_desc, melody_code) = match rng.random_range(0..melody_pool) {
-        0 => (AnyMelody::Moving(MovingVoice), "MovingVoice".to_string(), "M".to_string()),
-        1 => (AnyMelody::Tight(TightScale), "TightScale".to_string(), "T".to_string()),
+        0 => (
+            AnyMelody::Moving(MovingVoice),
+            "MovingVoice".to_string(),
+            "M".to_string(),
+        ),
+        1 => (
+            AnyMelody::Tight(TightScale),
+            "TightScale".to_string(),
+            "T".to_string(),
+        ),
         2 => {
             let window = rng.random_range(2..=5);
             (
@@ -220,7 +254,11 @@ pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, AnyFill, 
             let palette = vec![1.0, 1.5, 2.0, 3.0];
             let desc = format!("WindowedDurations {{ window: {window}, palette: {palette:?} }}");
             let code = format!("W{window}");
-            let rhythm = Box::new(WindowedDurations::with_rng(window, palette, sub_rng(&mut rng)));
+            let rhythm = Box::new(WindowedDurations::with_rng(
+                window,
+                palette,
+                sub_rng(&mut rng),
+            ));
             (AnyRhythm::Windowed(rhythm), desc, code)
         }
     };
@@ -245,12 +283,21 @@ pub fn random_strategies(seed: u64) -> (AnyWalk, AnyMelody, AnyRhythm, AnyFill, 
         melody,
         rhythm,
         fill,
-        Choice { code, walk: walk_desc, melody: melody_desc, rhythm: rhythm_desc, fill: fill_desc },
+        Choice {
+            code,
+            walk: walk_desc,
+            melody: melody_desc,
+            rhythm: rhythm_desc,
+            fill: fill_desc,
+        },
     )
 }
 
 /// `random_strategies` plus the `Pipeline` built from its result.
-pub fn build_pipeline(seed: u64, start: Triad) -> (Pipeline<AnyWalk, AnyMelody, AnyRhythm, AnyFill>, Choice) {
+pub fn build_pipeline(
+    seed: u64,
+    start: Triad,
+) -> (Pipeline<AnyWalk, AnyMelody, AnyRhythm, AnyFill>, Choice) {
     let (walk, melody, rhythm, fill, choice) = random_strategies(seed);
     (Pipeline::new(walk, melody, rhythm, fill, start), choice)
 }
@@ -276,8 +323,12 @@ mod tests {
         let start = Triad::new(0, Mode::Major);
         let (pipeline_a, choice_a) = build_pipeline(42, start);
         let (pipeline_b, choice_b) = build_pipeline(42, start);
-        let a: Vec<Event> = pipeline_a.take(24).collect();
-        let b: Vec<Event> = pipeline_b.take(24).collect();
+        let a: Vec<Event> = pipeline_a
+            .take(24)
+            .collect();
+        let b: Vec<Event> = pipeline_b
+            .take(24)
+            .collect();
         assert_eq!(a, b);
         assert_eq!(choice_a.to_string(), choice_b.to_string());
     }
@@ -287,8 +338,12 @@ mod tests {
         let start = Triad::new(0, Mode::Major);
         let (pipeline_a, _) = build_pipeline(1, start);
         let (pipeline_b, _) = build_pipeline(2, start);
-        let a: Vec<Event> = pipeline_a.take(24).collect();
-        let b: Vec<Event> = pipeline_b.take(24).collect();
+        let a: Vec<Event> = pipeline_a
+            .take(24)
+            .collect();
+        let b: Vec<Event> = pipeline_b
+            .take(24)
+            .collect();
         assert_ne!(a, b);
     }
 
@@ -297,7 +352,10 @@ mod tests {
         for seed in 0..500 {
             let (walk, melody, _, _, _) = random_strategies(seed);
             if matches!(melody, AnyMelody::SystemFixed(_)) {
-                assert!(matches!(walk, AnyWalk::Confined(_)), "seed {seed} paired SystemFixedScale with a non-confined walk");
+                assert!(
+                    matches!(walk, AnyWalk::Confined(_)),
+                    "seed {seed} paired SystemFixedScale with a non-confined walk"
+                );
             }
         }
     }

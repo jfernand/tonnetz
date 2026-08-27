@@ -28,7 +28,10 @@ pub struct MovingVoice;
 
 impl MelodyStrategy for MovingVoice {
     fn notes(&mut self, prev: Triad, next: Triad, _op: Utt, _history: &[Triad]) -> Vec<PitchClass> {
-        let prev_pcs: HashSet<PitchClass> = prev.pitch_classes().into_iter().collect();
+        let prev_pcs: HashSet<PitchClass> = prev
+            .pitch_classes()
+            .into_iter()
+            .collect();
         next.pitch_classes()
             .into_iter()
             .filter(|pc| !prev_pcs.contains(pc))
@@ -41,8 +44,15 @@ impl MelodyStrategy for MovingVoice {
 pub struct TightScale;
 
 impl MelodyStrategy for TightScale {
-    fn notes(&mut self, _prev: Triad, next: Triad, _op: Utt, _history: &[Triad]) -> Vec<PitchClass> {
-        next.pitch_classes().to_vec()
+    fn notes(
+        &mut self,
+        _prev: Triad,
+        next: Triad,
+        _op: Utt,
+        _history: &[Triad],
+    ) -> Vec<PitchClass> {
+        next.pitch_classes()
+            .to_vec()
     }
 }
 
@@ -54,13 +64,20 @@ pub struct RollingWindowScale {
 
 impl MelodyStrategy for RollingWindowScale {
     fn notes(&mut self, _prev: Triad, next: Triad, _op: Utt, history: &[Triad]) -> Vec<PitchClass> {
-        let start = history.len().saturating_sub(self.window.saturating_sub(1));
+        let start = history
+            .len()
+            .saturating_sub(
+                self.window
+                    .saturating_sub(1),
+            );
         let mut pcs: HashSet<PitchClass> = history[start..]
             .iter()
             .flat_map(|t| t.pitch_classes())
             .collect();
         pcs.extend(next.pitch_classes());
-        let mut notes: Vec<PitchClass> = pcs.into_iter().collect();
+        let mut notes: Vec<PitchClass> = pcs
+            .into_iter()
+            .collect();
         notes.sort_by_key(|pc| pc.0);
         notes
     }
@@ -87,10 +104,18 @@ impl SystemFixedScale {
 }
 
 impl MelodyStrategy for SystemFixedScale {
-    fn notes(&mut self, _prev: Triad, next: Triad, _op: Utt, _history: &[Triad]) -> Vec<PitchClass> {
+    fn notes(
+        &mut self,
+        _prev: Triad,
+        next: Triad,
+        _op: Utt,
+        _history: &[Triad],
+    ) -> Vec<PitchClass> {
         match self.system {
             Some(system) => system.pitch_classes(next),
-            None => next.pitch_classes().to_vec(),
+            None => next
+                .pitch_classes()
+                .to_vec(),
         }
     }
 
@@ -120,7 +145,10 @@ mod tests {
         let mut strategy = TightScale;
         let mut notes = strategy.notes(c_major, c_major, Utt::IDENTITY, &[]);
         notes.sort_by_key(|pc| pc.0);
-        assert_eq!(notes, vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(7)]);
+        assert_eq!(
+            notes,
+            vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(7)]
+        );
     }
 
     #[test]
@@ -129,7 +157,10 @@ mod tests {
         let mut strategy = RollingWindowScale { window: 1 };
         let mut notes = strategy.notes(c_major, c_major, Utt::IDENTITY, &[]);
         notes.sort_by_key(|pc| pc.0);
-        assert_eq!(notes, vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(7)]);
+        assert_eq!(
+            notes,
+            vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(7)]
+        );
     }
 
     #[test]
@@ -138,7 +169,10 @@ mod tests {
         let mut strategy = SystemFixedScale::new();
         let mut notes = strategy.notes(c_major, c_major, Utt::IDENTITY, &[]);
         notes.sort_by_key(|pc| pc.0);
-        assert_eq!(notes, vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(7)]);
+        assert_eq!(
+            notes,
+            vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(7)]
+        );
     }
 
     #[test]
@@ -148,7 +182,9 @@ mod tests {
         strategy.set_system(crate::System::Hexatonic);
         let mut notes = strategy.notes(c_major, c_major, Utt::IDENTITY, &[]);
         notes.sort_by_key(|pc| pc.0);
-        let expected: Vec<PitchClass> = [0, 3, 4, 7, 8, 11].map(PitchClass::new).to_vec();
+        let expected: Vec<PitchClass> = [0, 3, 4, 7, 8, 11]
+            .map(PitchClass::new)
+            .to_vec();
         assert_eq!(notes, expected);
     }
 
@@ -165,7 +201,12 @@ mod tests {
         // A minor = {A, C, E}, F major = {F, A, C}. Union = {A, C, E, F}, C major's G is excluded.
         assert_eq!(
             notes,
-            vec![PitchClass::new(0), PitchClass::new(4), PitchClass::new(5), PitchClass::new(9)]
+            vec![
+                PitchClass::new(0),
+                PitchClass::new(4),
+                PitchClass::new(5),
+                PitchClass::new(9)
+            ]
         );
     }
 }

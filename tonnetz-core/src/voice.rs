@@ -38,7 +38,7 @@ pub fn nearest_midi_note(reference_midi: i32, pitch_class: PitchClass) -> i32 {
 /// Chord and melody are kept separate (rather than one flat note list)
 /// since channel/program routing between them is a per-renderer config
 /// concern, not `VoiceTracker`'s.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NoteChange {
     pub chord_off: Option<[i32; 3]>,
     pub chord_on: Option<[i32; 3]>,
@@ -98,14 +98,21 @@ impl VoiceTracker {
     /// `event`'s, anchoring the new melody note on the previous one via
     /// `nearest_midi_note` regardless of whether `event.notes` is empty.
     pub fn advance(&mut self, event: &Event) -> NoteChange {
-        let chord_off = self.current_chord.take();
+        let chord_off = self
+            .current_chord
+            .take();
         let melody_off = self.current_melody;
 
         let chord = triad_midi_notes(event.triad, self.chord_root_midi);
         self.current_chord = Some(chord);
 
-        let anchor = self.current_melody.unwrap_or(self.melody_start_midi);
-        let melody_on = event.notes.first().map(|&pc| nearest_midi_note(anchor, pc));
+        let anchor = self
+            .current_melody
+            .unwrap_or(self.melody_start_midi);
+        let melody_on = event
+            .notes
+            .first()
+            .map(|&pc| nearest_midi_note(anchor, pc));
         self.current_melody = melody_on;
 
         NoteChange {
@@ -123,7 +130,9 @@ impl VoiceTracker {
     pub fn advance_fill(&mut self, pitch: PitchClass) -> NoteChange {
         let melody_off = self.current_melody;
 
-        let anchor = self.current_melody.unwrap_or(self.melody_start_midi);
+        let anchor = self
+            .current_melody
+            .unwrap_or(self.melody_start_midi);
         let midi = nearest_midi_note(anchor, pitch);
         self.current_melody = Some(midi);
 
@@ -140,9 +149,13 @@ impl VoiceTracker {
     /// `advance` has a "this is the last event" signal of their own.
     pub fn finish(&mut self) -> NoteChange {
         NoteChange {
-            chord_off: self.current_chord.take(),
+            chord_off: self
+                .current_chord
+                .take(),
             chord_on: None,
-            melody_off: self.current_melody.take(),
+            melody_off: self
+                .current_melody
+                .take(),
             melody_on: None,
         }
     }
@@ -202,7 +215,10 @@ mod tests {
         assert_eq!(change.chord_off, None);
         assert_eq!(change.melody_off, None);
         assert_eq!(change.chord_on, Some([60, 64, 67]));
-        assert_eq!(change.melody_on, Some(nearest_midi_note(72, PitchClass::new(0))));
+        assert_eq!(
+            change.melody_on,
+            Some(nearest_midi_note(72, PitchClass::new(0)))
+        );
     }
 
     #[test]
@@ -227,8 +243,13 @@ mod tests {
         assert_eq!(change.chord_on, Some(triad_midi_notes(a_minor, 60)));
         // Anchored on the previous melody note (72's octave of pitch class 0),
         // not re-derived from scratch.
-        let anchor = start.melody_on.unwrap();
-        assert_eq!(change.melody_on, Some(nearest_midi_note(anchor, PitchClass::new(9))));
+        let anchor = start
+            .melody_on
+            .unwrap();
+        assert_eq!(
+            change.melody_on,
+            Some(nearest_midi_note(anchor, PitchClass::new(9)))
+        );
     }
 
     #[test]
@@ -245,7 +266,11 @@ mod tests {
             is_fill: false,
         };
         let change = tracker.advance(&event);
-        assert!(change.melody_off.is_some());
+        assert!(
+            change
+                .melody_off
+                .is_some()
+        );
         assert_eq!(change.melody_on, None);
     }
 
@@ -275,8 +300,13 @@ mod tests {
         assert_eq!(change.chord_on, None);
         assert_eq!(change.melody_off, start.melody_on);
         // Anchored on the previous melody note, same as `advance`.
-        let anchor = start.melody_on.unwrap();
-        assert_eq!(change.melody_on, Some(nearest_midi_note(anchor, PitchClass::new(7))));
+        let anchor = start
+            .melody_on
+            .unwrap();
+        assert_eq!(
+            change.melody_on,
+            Some(nearest_midi_note(anchor, PitchClass::new(7)))
+        );
     }
 
     #[test]

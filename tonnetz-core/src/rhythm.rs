@@ -35,16 +35,34 @@ pub fn bjorklund(pulses: usize, steps: usize) -> Vec<bool> {
     let mut a: Vec<Vec<bool>> = vec![vec![true]; pulses];
     let mut b: Vec<Vec<bool>> = vec![vec![false]; steps - pulses];
     while b.len() > 1 {
-        let n = a.len().min(b.len());
+        let n = a
+            .len()
+            .min(b.len());
         let new_a: Vec<Vec<bool>> = (0..n)
-            .map(|i| a[i].iter().chain(b[i].iter()).copied().collect())
+            .map(|i| {
+                a[i].iter()
+                    .chain(b[i].iter())
+                    .copied()
+                    .collect()
+            })
             .collect();
-        let rem_a = if a.len() > n { a.split_off(n) } else { Vec::new() };
-        let rem_b = if b.len() > n { b.split_off(n) } else { Vec::new() };
+        let rem_a = if a.len() > n {
+            a.split_off(n)
+        } else {
+            Vec::new()
+        };
+        let rem_b = if b.len() > n {
+            b.split_off(n)
+        } else {
+            Vec::new()
+        };
         a = new_a;
         b = if !rem_a.is_empty() { rem_a } else { rem_b };
     }
-    a.into_iter().chain(b).flatten().collect()
+    a.into_iter()
+        .chain(b)
+        .flatten()
+        .collect()
 }
 
 /// A standard Euclidean rhythm: `pulses` onsets spread over `steps` slots,
@@ -69,15 +87,23 @@ impl Euclidean {
         let durations = onsets
             .windows(2)
             .map(|w| (w[1] - w[0]) as f64)
-            .chain(std::iter::once((steps - onsets[onsets.len() - 1] + onsets[0]) as f64))
+            .chain(std::iter::once(
+                (steps - onsets[onsets.len() - 1] + onsets[0]) as f64,
+            ))
             .collect();
-        Euclidean { steps, onsets, durations }
+        Euclidean {
+            steps,
+            onsets,
+            durations,
+        }
     }
 }
 
 impl RhythmStrategy for Euclidean {
     fn timing(&mut self, event_index: usize) -> (f64, f64) {
-        let pulses = self.onsets.len();
+        let pulses = self
+            .onsets
+            .len();
         let cycle = event_index / pulses;
         let slot = event_index % pulses;
         let onset = (cycle * self.steps) as f64 + self.onsets[slot] as f64;
@@ -126,20 +152,41 @@ impl<R: Rng> WindowedDurations<R> {
 
 impl<R: Rng> RhythmStrategy for WindowedDurations<R> {
     fn timing(&mut self, event_index: usize) -> (f64, f64) {
-        assert_eq!(event_index, self.chosen.len(), "requires sequential access from 0");
-        let tabu = &self.chosen[self.chosen.len().saturating_sub(self.window)..];
-        let legal: Vec<usize> = (0..self.palette.len()).filter(|i| !tabu.contains(i)).collect();
+        assert_eq!(
+            event_index,
+            self.chosen
+                .len(),
+            "requires sequential access from 0"
+        );
+        let tabu = &self.chosen[self
+            .chosen
+            .len()
+            .saturating_sub(self.window)..];
+        let legal: Vec<usize> = (0..self
+            .palette
+            .len())
+            .filter(|i| !tabu.contains(i))
+            .collect();
         let index = if legal.is_empty() {
-            (0..self.palette.len())
-                .min_by_key(|i| tabu.iter().rposition(|t| t == i).unwrap_or(0))
+            (0..self
+                .palette
+                .len())
+                .min_by_key(|i| {
+                    tabu.iter()
+                        .rposition(|t| t == i)
+                        .unwrap_or(0)
+                })
                 .expect("palette is non-empty")
         } else {
-            legal[self.rng.random_range(0..legal.len())]
+            legal[self
+                .rng
+                .random_range(0..legal.len())]
         };
         let duration = self.palette[index];
         let onset = self.elapsed;
         self.elapsed += duration;
-        self.chosen.push(index);
+        self.chosen
+            .push(index);
         (onset, duration)
     }
 }
@@ -175,7 +222,13 @@ mod tests {
             for pulses in 1..=steps {
                 let pattern = bjorklund(pulses, steps);
                 assert_eq!(pattern.len(), steps);
-                assert_eq!(pattern.iter().filter(|&&b| b).count(), pulses);
+                assert_eq!(
+                    pattern
+                        .iter()
+                        .filter(|&&b| b)
+                        .count(),
+                    pulses
+                );
             }
         }
     }

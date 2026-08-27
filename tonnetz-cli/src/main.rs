@@ -7,7 +7,9 @@ use std::time::Duration;
 use rand::RngExt;
 use tonnetz_core::{Event, Mode, Renderer, Triad, Utt};
 use tonnetz_midi::{MidiRenderer, MidiRendererConfig};
-use tonnetz_sound::{SoundBackend, SynthRenderer, SynthRendererConfig, WavRenderer, WavRendererConfig};
+use tonnetz_sound::{
+    SoundBackend, SynthRenderer, SynthRendererConfig, WavRenderer, WavRendererConfig,
+};
 
 const UNIT_SECONDS: f64 = 0.3; // one Euclidean rhythm "step"
 const STEPS: usize = 24;
@@ -76,12 +78,28 @@ fn parse_args() -> Args {
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--backend" => backend = args.next().expect("--backend requires a value"),
-            "--out" => out = Some(args.next().expect("--out requires a value")),
+            "--backend" => {
+                backend = args
+                    .next()
+                    .expect("--backend requires a value")
+            }
+            "--out" => {
+                out = Some(
+                    args.next()
+                        .expect("--out requires a value"),
+                )
+            }
             "--seed" => {
-                let value = args.next().expect("--seed requires a value");
-                let digits = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")).unwrap_or(&value);
-                seed = Some(u64::from_str_radix(digits, 16).expect("--seed must be a hexadecimal u64"));
+                let value = args
+                    .next()
+                    .expect("--seed requires a value");
+                let digits = value
+                    .strip_prefix("0x")
+                    .or_else(|| value.strip_prefix("0X"))
+                    .unwrap_or(&value);
+                seed = Some(
+                    u64::from_str_radix(digits, 16).expect("--seed must be a hexadecimal u64"),
+                );
             }
             other => eprintln!("warning: ignoring unknown argument '{other}'"),
         }
@@ -103,14 +121,18 @@ fn build_renderer(backend: &str, out: Option<String>) -> Result<Box<dyn Renderer
                 melody_velocity: 110,
             };
             let backend = match piano_override_path() {
-                Some(piano_path) => SoundBackend::with_piano_override(SOUNDFONT_PATH, piano_path, PIANO_CHANNEL)?,
+                Some(piano_path) => {
+                    SoundBackend::with_piano_override(SOUNDFONT_PATH, piano_path, PIANO_CHANNEL)?
+                }
                 None => SoundBackend::new(SOUNDFONT_PATH)?,
             };
             Ok(Box::new(SynthRenderer::new(backend, config)))
         }
         "text" => Ok(Box::new(TextRenderer)),
         "wav" => {
-            let out_path = out.unwrap_or_else(|| "output.wav".to_string()).into();
+            let out_path = out
+                .unwrap_or_else(|| "output.wav".to_string())
+                .into();
             let config = WavRendererConfig {
                 chord_channel: PIANO_CHANNEL,
                 chord_program: 0,
@@ -126,13 +148,20 @@ fn build_renderer(backend: &str, out: Option<String>) -> Result<Box<dyn Renderer
                 out_path,
             };
             let renderer = match piano_override_path() {
-                Some(piano_path) => WavRenderer::with_piano_override(SOUNDFONT_PATH, piano_path, PIANO_CHANNEL, config)?,
+                Some(piano_path) => WavRenderer::with_piano_override(
+                    SOUNDFONT_PATH,
+                    piano_path,
+                    PIANO_CHANNEL,
+                    config,
+                )?,
                 None => WavRenderer::new(SOUNDFONT_PATH, config)?,
             };
             Ok(Box::new(renderer))
         }
         "midi" => {
-            let out_path = out.unwrap_or_else(|| "output.mid".to_string()).into();
+            let out_path = out
+                .unwrap_or_else(|| "output.mid".to_string())
+                .into();
             Ok(Box::new(MidiRenderer::new(MidiRendererConfig {
                 chord_channel: 0,
                 chord_program: 0,
@@ -153,7 +182,9 @@ fn build_renderer(backend: &str, out: Option<String>) -> Result<Box<dyn Renderer
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = parse_args();
-    let seed = args.seed.unwrap_or_else(|| rand::rng().random());
+    let seed = args
+        .seed
+        .unwrap_or_else(|| rand::rng().random());
 
     let mut renderer = build_renderer(&args.backend, args.out)?;
 
@@ -166,7 +197,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     renderer.start(start);
 
     let mut last_duration = 0.0;
-    for event in pipeline.by_ref().take(STEPS) {
+    for event in pipeline
+        .by_ref()
+        .take(STEPS)
+    {
         if renderer.wants_realtime_pacing() {
             sleep(Duration::from_secs_f64(event.duration * UNIT_SECONDS));
         }
